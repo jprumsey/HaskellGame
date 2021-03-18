@@ -11,12 +11,15 @@ import Graphics.Gloss.Interface.Pure.Game
 -- The ships are squares
 -- All projectiles are circles whose health should be initialized to 1 and decremented to 0 upon use
 data Entity = Entity { position :: (Float, Float),
-                     velocity :: (Float, Float),
+                     evelocity :: (Float, Float),
                      health :: Int,
                      numSides :: Float,
                      sideLength :: Float
                      } deriving Show
 
+data Weapon = Weapon { wvelocity :: (Float, Float),
+                       damage :: Int
+                     } deriving Show
 
 -- TODO: add to state: score
 data ShooterGame = Game
@@ -28,20 +31,20 @@ data ShooterGame = Game
         enemyProjectiles :: [Entity],
         paused :: Bool,
         keysDown :: (Bool, Bool, Bool, Bool, Bool),
-        activeWeapon :: Int
+        activeWeapon :: Weapon
     } deriving Show
 
 initialState :: ShooterGame
 initialState = Game
     {
         frameCount = 0,
-        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (150,150) 5 3 playerSideLength,
+        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength,
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = weapon1
+        activeWeapon = pWeapon1
     }
 
 width, height, offset :: Int
@@ -49,10 +52,14 @@ width = 500
 height = 500
 offset = 50
 
-weapon1, weapon2, weapon3 :: Int
-weapon1 = 0
-weapon2 = 1
-weapon3 = 2
+eWeapon1, pWeapon1 :: Weapon
+eWeapon1 = Weapon { wvelocity = (0, -150), damage = 1 }
+pWeapon1 = Weapon { wvelocity = (0,  150), damage = 1 }
+
+playerFireRate, enemyFireRate, enemySpawnRate :: Int
+playerFireRate = 10
+enemyFireRate = 50
+enemySpawnRate = 600
 
 -- Steps player takes per frame, triangular side length of player
 playerSideLength, enemyBaseLength, spawnOffset, projectileRadius :: Float
@@ -65,7 +72,7 @@ background :: Color
 background = black
 
 window :: Display
-window = InWindow "TitleHere" (width, height) (offset, offset)
+window = InWindow "Square Shooter 5000" (width, height) (offset, offset)
 
 fps :: Int
 fps = 60
@@ -88,7 +95,8 @@ render :: ShooterGame  -- ^ The game state to render.
 render game =
   pictures [playerShip,
             enemyShips,
-            playerProj
+            playerProj,
+            enemyProj
             ]
   where
     -- the player
@@ -104,11 +112,13 @@ render game =
     enemyColor = dark blue -- TODO: fix so it can use multiple enemies
 
     playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
+    enemyProj  = pictures ( map (renderProjectile projectileRadius enemyProjectileColor ) (enemyProjectiles  game))
     renderProjectile :: Float -> Color -> Entity -> Picture
     renderProjectile radius col ent =
         uncurry translate (position ent) $ color col $ circleSolid radius
 
     playerProjectileColor = white
+    enemyProjectileColor  = white
     
 
 
@@ -130,7 +140,7 @@ handleKeys (EventKey (Char 'd') state _ _) game = game { keysDown = updatedKeys 
     where
         (w, a, s, _, sp) = keysDown game
         updatedKeys = if state == Down then (w, a, s, True, sp) else (w, a, s, False, sp)
-handleKeys (EventKey (Char 't') state _ _) game = game { keysDown = updatedKeys }
+handleKeys (EventKey (SpecialKey KeySpace) state _ _) game = game { keysDown = updatedKeys }
     where
         (w, a, s, d, _) = keysDown game
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
@@ -148,7 +158,7 @@ handleKeys _ game = game
 ------------------------------ UPDATES -------------------------------
 
 update :: Float -> ShooterGame -> ShooterGame
-update seconds game = runUpdates seconds (moveEntities seconds game)
+update seconds = runUpdates . moveEntities seconds
 
 -- moves everything
 moveEntities :: Float -> ShooterGame -> ShooterGame
@@ -156,24 +166,28 @@ moveEntities seconds game =
     game { 
         enemies = map (moveNonPlayer seconds) (enemies game),
         player = movePlayer seconds (keysDown game) (player game),
-        playerProjectiles = map (moveNonPlayer seconds) (playerProjectiles game)
+        playerProjectiles = map (moveNonPlayer seconds) (playerProjectiles game),
+        enemyProjectiles  = map (moveNonPlayer seconds) (enemyProjectiles  game)
         }
 
--- TODO: put logic for adding new enemies and enemy projectiles here
-runUpdates :: Float -> ShooterGame -> ShooterGame
-runUpdates seconds game =
+runUpdates :: ShooterGame -> ShooterGame
+runUpdates game =
     -- TODO: remove "dead" entities (health <= 0)
     game { frameCount = (frameCount game) + 1,
-        playerProjectiles = newProjectiles,
+        playerProjectiles = newPProjectiles,
+        enemyProjectiles =  newEProjectiles,
         enemies = newEnemies
         }
     where
         (x, y) = position $ player game
         (w, a, s, d, space) = keysDown game
-        newProjectiles = if ( ( rem ( frameCount game ) 5 ) == 0 ) 
-                            then firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game) 
+        newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
+                            then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
                             else playerProjectiles game
-        newEnemies = if ( ( rem ( frameCount game ) 600 ) == 120 ) 
+        newEProjectiles = if rem (frameCount game) enemyFireRate == 0
+                            then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
+                            else enemyProjectiles game
+        newEnemies = if rem ( frameCount game ) enemySpawnRate == 0 
                         then spawnEnemies (enemies game) 
                         else enemies game
 
@@ -182,7 +196,7 @@ movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
 movePlayer seconds (w, a, s, d, sp) ent = ent { position = newPos }
     where
         (xPos, yPos) = position ent
-        (xVel, yVel) = velocity ent
+        (xVel, yVel) = evelocity ent
         xPos' = xPos + fromIntegral ( fromEnum d - fromEnum a ) * xVel * seconds
         yPos' = yPos + fromIntegral ( fromEnum w - fromEnum s ) * yVel * seconds
         newPos = putInBounds (xPos', yPos') ( getCircRadius ent )
@@ -192,30 +206,16 @@ moveNonPlayer :: Float -> Entity -> Entity
 moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
     where
         (xPos, yPos) = position ent
-        (xVel, yVel) = velocity ent
+        (xVel, yVel) = evelocity ent
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
--- spaceDown, time, weapon, position, currentProjectiles
-firePlayerProjectiles :: Int -> (Float, Float) -> [Entity] -> [Entity]
-firePlayerProjectiles weapon1 position projectiles = 
-        (Entity position (0,150) 1 3 projectileRadius):projectiles
-
--- TODO: put logic for adding new enemies and enemy projectiles here
-runUpdates :: Float -> ShooterGame -> ShooterGame
-runUpdates seconds game =
-    -- TODO: remove "dead" entities (health <= 0)
-    game { frameCount = (frameCount game) + 1,
-        playerProjectiles = firedProjectiles,
-        enemies = newEnemies
-        }
-    where
-        (x, y) = position $ player game
-        (w, a, s, d, space) = keysDown game
-        firedProjectiles = if (rem (frameCount game) 5) == 0 && space
-                            then firePlayerProjectiles (activeWeapon game) (x, y) (playerProjectiles game)
-                        else (playerProjectiles game)
-        newEnemies = if ( ( rem ( frameCount game ) 100 ) == 0 ) then spawnEnemies (enemies game) else enemies game
+fireProjectile :: Weapon -> Entity -> Entity
+fireProjectile weapon ent = Entity (position ent) 
+                                   (wvelocity weapon)
+                                   (damage weapon)
+                                   2
+                                   projectileRadius
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
@@ -243,7 +243,7 @@ spawnEnemies entList = newEntList
         leftSpawn = -fromIntegral width / 2 + spawnOffset
         rightSpawn = fromIntegral width / 2 - spawnOffset - enemyBaseLength
         spawnDelta = 2 * spawnOffset + enemyBaseLength
-        spawnPoints = [ leftSpawn, leftSpawn + spawnDelta .. rightSpawn ]
+        spawnPoints = [ leftSpawn, leftSpawn + 2 * spawnDelta .. rightSpawn ]
         newEntList = entList ++ map spawnEnemy spawnPoints
 
 spawnEnemy :: Float -> Entity
