@@ -158,7 +158,7 @@ handleKeys _ game = game
 ------------------------------ UPDATES -------------------------------
 
 update :: Float -> ShooterGame -> ShooterGame
-update seconds = runUpdates . moveEntities seconds
+update seconds = handleCollisions . runUpdates . moveEntities seconds
 
 -- moves everything
 moveEntities :: Float -> ShooterGame -> ShooterGame
@@ -191,6 +191,16 @@ runUpdates game =
                         then spawnEnemies (enemies game) 
                         else enemies game
 
+handleCollisions :: ShooterGame -> ShooterGame
+handleCollisions game = game { 
+        enemyProjectiles  = newEProjectiles,
+        enemies = newEnemies
+    }
+    where
+        newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
+        newEnemies = filter (not . detectCollision (player game)) (enemies game)
+        
+
 -- moves player
 movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
 movePlayer seconds (w, a, s, d, sp) ent = ent { position = newPos }
@@ -214,7 +224,7 @@ fireProjectile :: Weapon -> Entity -> Entity
 fireProjectile weapon ent = Entity (position ent) 
                                    (wvelocity weapon)
                                    (damage weapon)
-                                   2
+                                   1
                                    projectileRadius
 
 -- Will be useful when determining if projectiles should be removed
@@ -228,14 +238,14 @@ outOfBounds ent = xOOB || yOOB
 
 -- Gets the circumradius of the described regular polynomial, use this for collisions
 getCircRadius :: Entity -> Float
-getCircRadius ent = ( sideLength ent ) / ( 2 * cos ( pi / ( numSides ent ) ) )
+getCircRadius ent = ( sideLength ent / 2 ) / ( 2 * cos ( pi / ( numSides ent ) ) )
 
 -- prevents xPos and yPos from going beyond the screen, use this for the player movement
 putInBounds :: (Float, Float) -> Float -> (Float, Float)
 putInBounds (xPos, yPos) radius = (xPos', yPos')
     where
-        xPos' = min ( max ( xPos ) ( -fromIntegral width  / 2 + radius / 2 ) ) ( fromIntegral width  / 2 - radius / 2 )
-        yPos' = min ( max ( yPos ) ( -fromIntegral height / 2 + radius / 2 ) ) ( fromIntegral height / 2 - radius / 2 )
+        xPos' = min ( max ( xPos ) ( -fromIntegral width  / 2 + radius ) ) ( fromIntegral width  / 2 - radius )
+        yPos' = min ( max ( yPos ) ( -fromIntegral height / 2 + radius ) ) ( fromIntegral height / 2 - radius )
 
 spawnEnemies :: [Entity] -> [Entity]
 spawnEnemies entList = newEntList
@@ -248,6 +258,20 @@ spawnEnemies entList = newEntList
 
 spawnEnemy :: Float -> Entity
 spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 3 4 enemyBaseLength
+
+detectCollisionList :: [Entity] -> Entity -> Bool
+detectCollision entList entRef = any (detectCollision entRef) entList
+
+detectCollision :: Entity -> Entity -> Bool
+detectCollision ent1 ent2 = xCol && yCol
+    where
+        r1 = getCircRadius ent1
+        (xPos1, yPos1) = position ent1
+        r2 = getCircRadius ent2
+        (xPos2, yPos2) = position ent2
+        xCol = (xPos1 + r1) > (xPos2-r2) && (xPos1 - r1) < (xPos2 + r2)
+        yCol = (yPos1 + r1) > (yPos2-r2) && (yPos1 - r1) < (yPos2 + r2)
+
 
 main :: IO ()
 main = play window background fps initialState render handleKeys update
