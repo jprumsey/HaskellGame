@@ -4,7 +4,7 @@ import Graphics.Gloss
 import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
-
+import Data.Time.Clock
 
 ------------------------------ STATE -------------------------------
 
@@ -22,6 +22,7 @@ data Entity = Entity { position :: (Float, Float),
 -- TODO: add to state: score
 data ShooterGame = Game
     { 
+        time :: Float,
         player :: Entity,
         enemies :: [Entity],
         playerProjectiles :: [Entity],
@@ -34,6 +35,7 @@ data ShooterGame = Game
 initialState :: ShooterGame
 initialState = Game
     {
+        time = 0,
         player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (150,150) 5 3 playerSideLength,
         enemies = [ Entity (0, 0) (30, 0) 1 4 enemyBaseLength ],
         playerProjectiles = [],
@@ -68,9 +70,6 @@ window = InWindow "TitleHere" (width, height) (offset, offset)
 
 fps :: Int
 fps = 60
-
-update :: Float -> ShooterGame -> ShooterGame
-update seconds game = (runUpdates . moveEntities seconds) game
 
 ------------------------------ RENDERING -------------------------------
 -- Path representing an equilateral triangle centered about origin, with vertex pointed upwards
@@ -146,6 +145,11 @@ handleKeys (EventKey (Char 'p') Down _ _) game =
 
 handleKeys _ game = game
 
+------------------------------ UPDATES -------------------------------
+
+update :: Float -> ShooterGame -> ShooterGame
+update seconds game = runUpdates seconds (moveEntities seconds game)
+
 -- moves everything
 moveEntities :: Float -> ShooterGame -> ShooterGame
 moveEntities seconds game = 
@@ -175,21 +179,20 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         yPos' = yPos + yVel * seconds
 
 -- add additional weapons here
-playerFireProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
-playerFireProjectiles spaceDown weaponType position projectiles = 
-    if spaceDown
-        then 
-            if weaponType == weapon1
-                then
-                    (Entity position (0,150) 1 3 projectileRadius):projectiles
-            else projectiles
-    else
-        projectiles
+firePlayerProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
+firePlayerProjectiles False _ _ projectiles = projectiles
+firePlayerProjectiles True weapon1 position projectiles = 
+    -- delay here?
+    (Entity position (0,150) 1 3 projectileRadius):projectiles
+
 
 -- TODO: put logic for adding new enemies and enemy projectiles here
-runUpdates :: ShooterGame -> ShooterGame
-runUpdates game =
-    game { playerProjectiles = playerFireProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)}
+runUpdates :: Float -> ShooterGame -> ShooterGame
+runUpdates seconds game =
+    -- TODO: remove "dead" entities (health <= 0)
+    game { time = (time game) + seconds,
+        playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)
+        }
     where
         (x, y) = position $ player game
         (w, a, s, d, space) = keysDown game
