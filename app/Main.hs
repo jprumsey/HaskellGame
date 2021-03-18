@@ -14,7 +14,7 @@ import Graphics.Gloss.Interface.Pure.Game
 data Entity = Entity { position :: (Float, Float),
                      velocity :: (Float, Float),
                      health :: Int 
-                     }
+                     } deriving Show
 
 
 -- TODO: add to state: active weapon
@@ -24,17 +24,19 @@ data ShooterGame = Game
         enemies :: [Entity],
         playerProjectiles :: [Entity],
         enemyProjectiles :: [Entity],
-        paused :: Bool
-    }
+        paused :: Bool,
+        keysDown :: (Bool, Bool, Bool, Bool)
+    } deriving Show
 
 initialState :: ShooterGame
 initialState = Game
     {
-        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (0,0) 5,
+        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (150,150) 5,
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
-        paused = False
+        paused = False,
+        keysDown = (False, False, False, False)
     }
 
 width, height, offset :: Int
@@ -43,9 +45,8 @@ height = 500
 offset = 50
 
 -- Steps player takes per frame, triangular side length of player
-playerStep, playerSideLength :: Float
-playerStep = 5
-playerSideLength = 60
+playerSideLength :: Float
+playerSideLength = 30
 
 background :: Color
 background = black
@@ -57,7 +58,7 @@ fps :: Int
 fps = 60
 
 update :: Float -> ShooterGame -> ShooterGame
-update seconds game = game
+update seconds game = movePlayer seconds game
 
 ------------------------------ RENDERING -------------------------------
 -- Path representing an equilateral triangle centered about origin, with vertex pointed upwards
@@ -83,26 +84,22 @@ render game =
 
 ------------------------------ CONTROLS -------------------------------
 handleKeys :: Event -> ShooterGame -> ShooterGame
-handleKeys (EventKey (Char 'w') _ _ _) game =
-    if y < fromIntegral width / 2
-        then game { player = Entity (x, y + playerStep) (0,0) (health $ player game)} else game
+handleKeys (EventKey (Char 'w') state _ _) game = game { keysDown = updatedKeys }
     where
-        (x, y) = position $ player game
-handleKeys (EventKey (Char 's') _ _ _) game =
-    if y > -fromIntegral width / 2
-        then game { player = Entity (x, y - playerStep) (0,0) (health $ player game)} else game
+        (_, a, s, d) = keysDown game
+        updatedKeys = if state == Down then (True, a, s, d) else (False, a, s, d)
+handleKeys (EventKey (Char 's') state _ _) game = game { keysDown = updatedKeys }
     where
-        (x, y) = position $ player game
-handleKeys (EventKey (Char 'a') _ _ _) game =
-    if x > -fromIntegral width / 2
-        then game { player = Entity (x - playerStep, y) (0,0) (health $ player game)} else game
+        (w, a, _, d) = keysDown game
+        updatedKeys = if state == Down then (w, a, True, d) else (w, a, False, d)
+handleKeys (EventKey (Char 'a') state _ _) game = game { keysDown = updatedKeys }
     where
-        (x, y) = position $ player game
-handleKeys (EventKey (Char 'd') _ _ _) game =
-    if x < fromIntegral width / 2
-        then game { player = Entity (x + playerStep, y) (0,0) (health $ player game)} else game
+        (w, _, s, d) = keysDown game
+        updatedKeys = if state == Down then (w, True, s, d) else (w, False, s, d)
+handleKeys (EventKey (Char 'd') state _ _) game = game { keysDown = updatedKeys }
     where
-        (x, y) = position $ player game
+        (w, a, s, _) = keysDown game
+        updatedKeys = if state == Down then (w, a, s, True) else (w, a, s, False)
 
 -- TODO: weapon change
 
@@ -111,6 +108,17 @@ handleKeys (EventKey (Char 'p') Down _ _) game =
  game { paused = (not (paused game)) }
 
 handleKeys _ game = game
+
+movePlayer :: Float -> ShooterGame -> ShooterGame
+movePlayer seconds game = game { player = newPlayer }
+    where
+        (w, a, s, d) = keysDown game
+        playerEnt = player game
+        (xPos, yPos) = position playerEnt
+        (xVel, yVel) = velocity playerEnt
+        xPos' = xPos + fromIntegral ( fromEnum d - fromEnum a ) * xVel * seconds
+        yPos' = yPos + fromIntegral ( fromEnum w - fromEnum s ) * yVel * seconds
+        newPlayer = playerEnt { position = (xPos', yPos') }
 
 main :: IO ()
 main = play window background fps initialState render handleKeys update
