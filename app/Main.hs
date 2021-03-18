@@ -47,9 +47,10 @@ height = 500
 offset = 50
 
 -- Steps player takes per frame, triangular side length of player
-playerSideLength, enemyBaseLength :: Float
+playerSideLength, enemyBaseLength, spawnOffset :: Float
 playerSideLength = 30
-enemyBaseLength = 15
+enemyBaseLength = 20
+spawnOffset = 10
 
 background :: Color
 background = black
@@ -171,6 +172,27 @@ putInBounds (xPos, yPos) radius = (xPos', yPos')
     where
         xPos' = min ( max ( xPos ) ( -fromIntegral width  / 2 + radius / 2 ) ) ( fromIntegral width  / 2 - radius / 2 )
         yPos' = min ( max ( yPos ) ( -fromIntegral height / 2 + radius / 2 ) ) ( fromIntegral height / 2 - radius / 2 )
+
+spawnEnemies :: [Entity] -> [Entity]
+spawnEnemies entList = newEntList
+    where
+        leftSpawn = -fromIntegral width / 2 + spawnOffset
+        rightSpawn = fromIntegral width / 2 - spawnOffset - enemyBaseLength
+        spawnDelta = 2 * spawnOffset + enemyBaseLength
+        spawnPoints = [ leftSpawn, leftSpawn + spawnDelta .. rightSpawn ]
+        newEntList = map spawnEnemy spawnPoints
+
+spawnEnemy :: Float -> Entity
+spawnEnemy xCor = Entity (xCor, spawnOffset) (0, 50) 3 4 enemyBaseLength
+
+
+
+{ position :: (Float, Float),
+                     velocity :: (Float, Float),
+                     health :: Int,
+                     numSides :: Float,
+                     sideLength :: Float
+                     }
 
 main :: IO ()
 main = play window background fps initialState render handleKeys update
