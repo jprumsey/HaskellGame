@@ -177,10 +177,10 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
--- add additional weapons here
-firePlayerProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
-firePlayerProjectiles False _ _ projectiles = projectiles
-firePlayerProjectiles True weapon1 position projectiles = 
+-- spaceDown, time, weapon, position, currentProjectiles
+firePlayerProjectiles :: Bool -> Float -> Int -> (Float, Float) -> [Entity] -> [Entity]
+firePlayerProjectiles False _ _ _ projectiles = projectiles
+firePlayerProjectiles True time weapon1 position projectiles = 
     -- delay here?
     (Entity position (0,150) 1 3 projectileRadius):projectiles
 
@@ -190,7 +190,7 @@ runUpdates :: Float -> ShooterGame -> ShooterGame
 runUpdates seconds game =
     -- TODO: remove "dead" entities (health <= 0)
     game { time = (time game) + seconds,
-        playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)
+        playerProjectiles = firePlayerProjectiles space (time game) (activeWeapon game) (x, y) (playerProjectiles game)
         }
     where
         (x, y) = position $ player game
