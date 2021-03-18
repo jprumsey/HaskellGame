@@ -5,7 +5,6 @@ import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
 
-
 ------------------------------ STATE -------------------------------
 
 -- The player is a triangle
@@ -67,9 +66,6 @@ window = InWindow "TitleHere" (width, height) (offset, offset)
 
 fps :: Int
 fps = 60
-
-update :: Float -> ShooterGame -> ShooterGame
-update seconds game = (runUpdates . moveEntities seconds) game
 
 ------------------------------ RENDERING -------------------------------
 -- Path representing an equilateral triangle centered about origin, with vertex pointed upwards
@@ -145,6 +141,11 @@ handleKeys (EventKey (Char 'p') Down _ _) game =
 
 handleKeys _ game = game
 
+------------------------------ UPDATES -------------------------------
+
+update :: Float -> ShooterGame -> ShooterGame
+update seconds game = (runUpdates . moveEntities seconds) game
+
 -- moves everything
 moveEntities :: Float -> ShooterGame -> ShooterGame
 moveEntities seconds game = 
@@ -174,12 +175,13 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         yPos' = yPos + yVel * seconds
 
 -- add additional weapons here
-playerFireProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
-playerFireProjectiles spaceDown weaponType position projectiles = 
-    if spaceDown
+firePlayerProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
+firePlayerProjectiles fireKeyDown weaponType position projectiles = 
+    if fireKeyDown
         then 
             if weaponType == weapon1
                 then
+                    -- delay here?
                     (Entity position (0,150) 1 3 projectileRadius):projectiles
             else projectiles
     else
@@ -188,7 +190,8 @@ playerFireProjectiles spaceDown weaponType position projectiles =
 -- TODO: put logic for adding new enemies and enemy projectiles here
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
-    game { playerProjectiles = playerFireProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)}
+    -- TODO: remove "dead" entities (health <= 0)
+    game { playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)}
     where
         (x, y) = position $ player game
         (w, a, s, d, space) = keysDown game
