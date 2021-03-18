@@ -27,7 +27,6 @@ data Weapon = Weapon { wvelocity :: (Float, Float),
                        damage :: Int
                      } deriving Show
 
--- TODO: add to state: score
 data ShooterGame = Game
     { 
         frameCount :: Int,
@@ -37,7 +36,8 @@ data ShooterGame = Game
         enemyProjectiles :: [Entity],
         paused :: Bool,
         keysDown :: (Bool, Bool, Bool, Bool, Bool),
-        activeWeapon :: Weapon
+        activeWeapon :: Weapon,
+        score :: Int
     } deriving Show
 
 initialState :: ShooterGame
@@ -50,11 +50,12 @@ initialState = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = pWeapon1
+        activeWeapon = pWeapon1,
+        score = 0
     }
 
-gameOverState :: ShooterGame
-gameOverState = Game
+gameOverState :: Int -> ShooterGame
+gameOverState finalScore = Game
     {
         frameCount = 0,
         player = Entity (0, 0) (0,0) 0 3 playerSideLength,
@@ -63,7 +64,8 @@ gameOverState = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = pWeapon1
+        activeWeapon = pWeapon1,
+        score = finalScore
     }
 
 width, height, offset :: Int
@@ -196,7 +198,7 @@ moveEntities seconds game =
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
     if (not $ alive (player game))
-        then gameOverState
+        then gameOverState (score game)
         else
             game { frameCount = (frameCount game) + 1,
                 playerProjectiles = newPProjectiles,
@@ -222,12 +224,15 @@ handleCollisions game = game {
         player = (player game) { health = (health $ player game) - hitsToPlayer}, 
         playerProjectiles = newPProjectiles,
         enemyProjectiles  = newEProjectiles,
-        enemies = newEnemies
+        enemies = newEnemies,
+        score = (score game) + killedEnemyCount
     }
     where
         newPProjectiles = filter (not . detectCollisionList (enemies game)) (playerProjectiles game)
         newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
-        newEnemies = filter alive $ map (damageEnemy (playerProjectiles game)) $ filter (not . detectCollision (player game)) (enemies game)
+        damagedEnemies = map (damageEnemy (playerProjectiles game)) $ filter (not . detectCollision (player game)) (enemies game)
+        newEnemies = filter alive $ damagedEnemies
+        killedEnemyCount = (length damagedEnemies) + (length newEnemies)
         hitsToPlayer = detectCollisionCount ((enemyProjectiles game) ++ (enemies game)) (player game)
         
 alive :: Entity -> Bool
