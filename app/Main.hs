@@ -5,6 +5,14 @@ import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
 
+-- CONTROLS --
+
+-- Shoot: t
+-- Move: wasd
+-- Switch weapon: TBD but probably hjk
+
+-- You begin with 5 health.
+
 ------------------------------ STATE -------------------------------
 
 -- The player is a triangle
@@ -134,15 +142,15 @@ handleKeys (EventKey (Char 't') state _ _) game = game { keysDown = updatedKeys 
     where
         (w, a, s, d, _) = keysDown game
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
-
-
--- TODO: after basics: weapon change
-
+handleKeys (EventKey (Char 'n') _ _ _) game = initialState
+-- TODO: add this to update
 -- For a 'p' keypress, pause or unpause the game
 handleKeys (EventKey (Char 'p') Down _ _) game =
  game { paused = (not (paused game)) }
 
 handleKeys _ game = game
+
+-- TODO: after basics: weapon change
 
 ------------------------------ UPDATES -------------------------------
 
@@ -182,9 +190,13 @@ firePlayerProjectiles :: Int -> (Float, Float) -> [Entity] -> [Entity]
 firePlayerProjectiles weapon1 position projectiles = 
         (Entity position (0,150) 1 3 projectileRadius):projectiles
 
+-- COLLISIONS --
 
+handlePlayerEnemyCollision :: ShooterGame -> ShooterGame
+handlePlayerEnemyCollision game =
+    
 
--- TODO: put logic for adding new enemies and enemy projectiles here
+-- TODO: put logic for adding enemy projectiles here
 runUpdates :: Float -> ShooterGame -> ShooterGame
 runUpdates seconds game =
     -- TODO: remove "dead" entities (health <= 0)
@@ -198,7 +210,7 @@ runUpdates seconds game =
         firedProjectiles = if (rem (frameCount game) 5) == 0 && space
                             then firePlayerProjectiles (activeWeapon game) (x, y) (playerProjectiles game)
                         else (playerProjectiles game)
-        newEnemies = if ( ( rem ( frameCount game ) 100 ) == 0 ) then spawnEnemies (enemies game) else enemies game
+        newEnemies = if ( ( rem ( frameCount game ) 1000 ) == 0 ) then spawnEnemies (enemies game) else enemies game
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
