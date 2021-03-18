@@ -4,6 +4,7 @@ import Graphics.Gloss
 import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
+import Data.Time.Clock
 
 ------------------------------ STATE -------------------------------
 
@@ -21,6 +22,7 @@ data Entity = Entity { position :: (Float, Float),
 -- TODO: add to state: score
 data ShooterGame = Game
     { 
+        time :: Float,
         player :: Entity,
         enemies :: [Entity],
         playerProjectiles :: [Entity],
@@ -33,6 +35,7 @@ data ShooterGame = Game
 initialState :: ShooterGame
 initialState = Game
     {
+        time = 0,
         player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (150,150) 5 3 playerSideLength,
         enemies = [ Entity (0, 0) (30, 0) 1 4 enemyBaseLength ],
         playerProjectiles = [],
@@ -144,7 +147,7 @@ handleKeys _ game = game
 ------------------------------ UPDATES -------------------------------
 
 update :: Float -> ShooterGame -> ShooterGame
-update seconds game = (runUpdates . moveEntities seconds) game
+update seconds game = runUpdates seconds (moveEntities seconds game)
 
 -- moves everything
 moveEntities :: Float -> ShooterGame -> ShooterGame
@@ -183,10 +186,12 @@ firePlayerProjectiles True weapon1 position projectiles =
 
 
 -- TODO: put logic for adding new enemies and enemy projectiles here
-runUpdates :: ShooterGame -> ShooterGame
-runUpdates game =
+runUpdates :: Float -> ShooterGame -> ShooterGame
+runUpdates seconds game =
     -- TODO: remove "dead" entities (health <= 0)
-    game { playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)}
+    game { time = (time game) + seconds,
+        playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)
+        }
     where
         (x, y) = position $ player game
         (w, a, s, d, space) = keysDown game
