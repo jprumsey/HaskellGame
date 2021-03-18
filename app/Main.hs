@@ -96,9 +96,13 @@ render game =
   pictures [playerShip,
             enemyShips,
             playerProj,
-            enemyProj
+            enemyProj,
+            displayText
             ]
   where
+    -- text
+    displayText = uncurry translate (-fromIntegral width / 2 + 5, fromIntegral height / 2 - 20) $ uncurry scale (0.15, 0.15) $ color white $ Text ( "Lives: " ++ show (health $ player game) )
+
     -- the player
     playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
     playerColor = dark red
@@ -187,7 +191,7 @@ runUpdates game =
         newEProjectiles = if rem (frameCount game) enemyFireRate == 0
                             then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
                             else enemyProjectiles game
-        newEnemies = if rem ( frameCount game ) enemySpawnRate == 0 
+        newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                         then spawnEnemies (enemies game) 
                         else enemies game
 
@@ -260,7 +264,7 @@ spawnEnemy :: Float -> Entity
 spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 3 4 enemyBaseLength
 
 detectCollisionList :: [Entity] -> Entity -> Bool
-detectCollision entList entRef = any (detectCollision entRef) entList
+detectCollisionList entList entRef = any (detectCollision entRef) entList
 
 detectCollision :: Entity -> Entity -> Bool
 detectCollision ent1 ent2 = xCol && yCol
