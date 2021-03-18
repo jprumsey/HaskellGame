@@ -5,6 +5,12 @@ import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
 
+-- CONTROLS --
+-- Move: w-a-s-d
+-- Shoot: space bar
+-- New Game: n
+-- You have 5 health, to restart the game upon death press n.
+
 ------------------------------ STATE -------------------------------
 
 -- The player is a triangle
@@ -165,6 +171,7 @@ handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
 -- TODO: after basics: weapon change
 
+-- TODO: implement this in update function
 -- For a 'p' keypress, pause or unpause the game
 handleKeys (EventKey (Char 'p') Down _ _) game =
  game { paused = (not (paused game)) }
