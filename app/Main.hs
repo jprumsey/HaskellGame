@@ -47,6 +47,19 @@ initialState = Game
         activeWeapon = pWeapon1
     }
 
+gameOverState :: ShooterGame
+gameOverState = Game
+    {
+        frameCount = 0,
+        player = Entity (0, 0) (0,0) 0 3 playerSideLength,
+        enemies = [],
+        playerProjectiles = [],
+        enemyProjectiles = [],
+        paused = False,
+        keysDown = (False, False, False, False, False),
+        activeWeapon = pWeapon1
+    }
+
 width, height, offset :: Int
 width = 500
 height = 500
@@ -93,32 +106,35 @@ triangleSolid sideLength
 render :: ShooterGame  -- ^ The game state to render.
        -> Picture   -- ^ A picture of this game state.
 render game =
-  pictures [playerShip,
-            enemyShips,
-            playerProj,
-            enemyProj
-            ]
-  where
-    -- the player
-    playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
-    playerColor = dark red
+    if (not $ alive (player game))
+        then pictures []
+    else
+        pictures [playerShip,
+                    enemyShips,
+                    playerProj,
+                    enemyProj
+                    ]
+        where
+            -- the player
+            playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
+            playerColor = dark red
 
-    -- the enemies
-    enemyShips = pictures ( map renderEnemy ( enemies game ) )
-    renderEnemy :: Entity -> Picture
-    renderEnemy ent = 
-        uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength
+            -- the enemies
+            enemyShips = pictures ( map renderEnemy ( enemies game ) )
+            renderEnemy :: Entity -> Picture
+            renderEnemy ent = 
+                uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength
 
-    enemyColor = dark blue -- TODO: fix so it can use multiple enemies
+            enemyColor = dark blue -- TODO: fix so it can use multiple enemies
 
-    playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
-    enemyProj  = pictures ( map (renderProjectile projectileRadius enemyProjectileColor ) (enemyProjectiles  game))
-    renderProjectile :: Float -> Color -> Entity -> Picture
-    renderProjectile radius col ent =
-        uncurry translate (position ent) $ color col $ circleSolid radius
+            playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
+            enemyProj  = pictures ( map (renderProjectile projectileRadius enemyProjectileColor ) (enemyProjectiles  game))
+            renderProjectile :: Float -> Color -> Entity -> Picture
+            renderProjectile radius col ent =
+                uncurry translate (position ent) $ color col $ circleSolid radius
 
-    playerProjectileColor = white
-    enemyProjectileColor  = greyN 0.5
+            playerProjectileColor = white
+            enemyProjectileColor  = greyN 0.5
     
 
 
@@ -173,7 +189,7 @@ moveEntities seconds game =
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
     if (not $ alive (player game))
-        then initialState
+        then gameOverState
         else
             game { frameCount = (frameCount game) + 1,
                 playerProjectiles = newPProjectiles,
