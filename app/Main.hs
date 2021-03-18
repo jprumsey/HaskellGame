@@ -79,7 +79,7 @@ pWeapon1 = Weapon { wvelocity = (0,  150), damage = 1 }
 
 playerFireRate, enemyFireRate, enemySpawnRate :: Int
 playerFireRate = 10
-enemyFireRate = 50
+enemyFireRate = 100
 enemySpawnRate = 600
 
 -- Steps player takes per frame, triangular side length of player
@@ -125,7 +125,10 @@ render game =
                     ]
         where
             -- text
-            displayText = uncurry translate (-fromIntegral width / 2 + 5, fromIntegral height / 2 - 20) $ uncurry scale (0.15, 0.15) $ color white $ Text ( "Lives: " ++ show (health $ player game) )
+            displayText = uncurry translate (-fromIntegral width / 2 + 5, fromIntegral height / 2 - 20) 
+                $ uncurry scale (0.15, 0.15) 
+                $ color white 
+                $ Text ( "Lives: " ++ show (health $ player game) ++ " Score: " ++ show (score game) )
 
             -- the player
             playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
@@ -236,7 +239,7 @@ handleCollisions game = game {
         newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
         damagedEnemies = map (damageEnemy (playerProjectiles game)) $ filter (not . detectCollision (player game)) (enemies game)
         newEnemies = filter alive $ damagedEnemies
-        killedEnemyCount = (length damagedEnemies) + (length newEnemies)
+        killedEnemyCount = (length damagedEnemies) - (length newEnemies)
         hitsToPlayer = detectCollisionCount ((enemyProjectiles game) ++ (enemies game)) (player game)
         
 alive :: Entity -> Bool
@@ -302,7 +305,7 @@ spawnEnemies entList = newEntList
         newEntList = entList ++ map spawnEnemy spawnPoints
 
 spawnEnemy :: Float -> Entity
-spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 3 4 enemyBaseLength
+spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength
 
 detectCollisionList :: [Entity] -> Entity -> Bool
 detectCollisionList entList entRef = any (detectCollision entRef) entList
