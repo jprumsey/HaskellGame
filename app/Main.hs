@@ -204,11 +204,15 @@ handleCollisions game = game {
     where
         newPProjectiles = filter (not . detectCollisionList (enemies game)) (playerProjectiles game)
         newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
-        newEnemies = filter alive $ filter (not . detectCollision (player game)) (enemies game)
+        newEnemies = filter alive $ map (damageEnemy (playerProjectiles game)) $ filter (not . detectCollision (player game)) (enemies game)
         hitsToPlayer = detectCollisionCount ((enemyProjectiles game) ++ (enemies game)) (player game)
         
 alive :: Entity -> Bool
 alive ent = (health ent) > 0
+
+damageEnemy :: [Entity] -> Entity -> Entity
+damageEnemy projectiles enemy =
+    enemy { health = (health enemy) - (detectCollisionCount projectiles enemy) }
 
 -- moves player
 movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
