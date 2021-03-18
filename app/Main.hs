@@ -134,6 +134,7 @@ handleKeys (EventKey (Char 't') state _ _) game = game { keysDown = updatedKeys 
     where
         (w, a, s, d, _) = keysDown game
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
+handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
 
 -- TODO: after basics: weapon change
@@ -157,6 +158,24 @@ moveEntities seconds game =
         player = movePlayer seconds (keysDown game) (player game),
         playerProjectiles = map (moveNonPlayer seconds) (playerProjectiles game)
         }
+
+-- TODO: put logic for adding new enemies and enemy projectiles here
+runUpdates :: Float -> ShooterGame -> ShooterGame
+runUpdates seconds game =
+    -- TODO: remove "dead" entities (health <= 0)
+    game { frameCount = (frameCount game) + 1,
+        playerProjectiles = newProjectiles,
+        enemies = newEnemies
+        }
+    where
+        (x, y) = position $ player game
+        (w, a, s, d, space) = keysDown game
+        newProjectiles = if ( ( rem ( frameCount game ) 5 ) == 0 ) 
+                            then firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game) 
+                            else playerProjectiles game
+        newEnemies = if ( ( rem ( frameCount game ) 600 ) == 120 ) 
+                        then spawnEnemies (enemies game) 
+                        else enemies game
 
 -- moves player
 movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
@@ -184,19 +203,7 @@ firePlayerProjectiles True weapon1 position projectiles =
     -- delay here?
     (Entity position (0,150) 1 3 projectileRadius):projectiles
 
-
--- TODO: put logic for adding new enemies and enemy projectiles here
-runUpdates :: Float -> ShooterGame -> ShooterGame
-runUpdates seconds game =
-    -- TODO: remove "dead" entities (health <= 0)
-    game { frameCount = (frameCount game) + 1,
-        playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game),
-        enemies = newEnemies
-        }
-    where
-        (x, y) = position $ player game
-        (w, a, s, d, space) = keysDown game
-        newEnemies = if ( ( rem ( frameCount game ) 100 ) == 0 ) then spawnEnemies (enemies game) else enemies game
+-- fireEnemyProjectiles :: 
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
