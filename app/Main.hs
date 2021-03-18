@@ -118,7 +118,7 @@ render game =
         uncurry translate (position ent) $ color col $ circleSolid radius
 
     playerProjectileColor = white
-    enemyProjectileColor  = white
+    enemyProjectileColor  = greyN 0.5
     
 
 
@@ -172,36 +172,43 @@ moveEntities seconds game =
 
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
-    game { frameCount = (frameCount game) + 1,
-        playerProjectiles = newPProjectiles,
-        enemyProjectiles =  newEProjectiles,
-        enemies = newEnemies
-        }
-    where
-        (x, y) = position $ player game
-        (w, a, s, d, space) = keysDown game
-        newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
-                            then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
-                            else playerProjectiles game
-        newEProjectiles = if rem (frameCount game) enemyFireRate == 0
-                            then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
-                            else enemyProjectiles game
-        newEnemies = if rem ( frameCount game ) enemySpawnRate == 0 
-                        then spawnEnemies (enemies game) 
-                        else enemies game
+    if (not $ alive (player game))
+        then initialState
+        else
+            game { frameCount = (frameCount game) + 1,
+                playerProjectiles = newPProjectiles,
+                enemyProjectiles =  newEProjectiles,
+                enemies = newEnemies
+                }
+            where
+                (x, y) = position $ player game
+                (w, a, s, d, space) = keysDown game
+                newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
+                                    then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
+                                    else playerProjectiles game
+                newEProjectiles = if rem (frameCount game) enemyFireRate == 0
+                                    then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
+                                    else enemyProjectiles game
+                newEnemies = if rem ( frameCount game ) enemySpawnRate == 0 
+                                then spawnEnemies (enemies game) 
+                                else enemies game
+
 
 handleCollisions :: ShooterGame -> ShooterGame
 handleCollisions game = game {
-        player = newPlayer, 
+        player = (player game) { health = (health $ player game) - hitsToPlayer}, 
+        playerProjectiles = newPProjectiles,
         enemyProjectiles  = newEProjectiles,
         enemies = newEnemies
     }
     where
+        newPProjectiles = filter (not . detectCollisionList (enemies game)) (playerProjectiles game)
         newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
-        newEnemies = filter (not . detectCollision (player game)) (enemies game)
-        hitsToPlayer = detectCollisionList ((enemyProjectiles game) ++ (enemies game)) (player game)
-        newPlayer = (player game) { health = (health $ player game) - hitsToPlayer}
+        newEnemies = filter alive $ filter (not . detectCollision (player game)) (enemies game)
+        hitsToPlayer = detectCollisionCount ((enemyProjectiles game) ++ (enemies game)) (player game)
         
+alive :: Entity -> Bool
+alive ent = (health ent) > 0
 
 -- moves player
 movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
@@ -261,8 +268,11 @@ spawnEnemies entList = newEntList
 spawnEnemy :: Float -> Entity
 spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 3 4 enemyBaseLength
 
-detectCollisionList :: [Entity] -> Entity -> Int
-detectCollisionList entList entRef = length (filter (detectCollision entRef) entList)
+detectCollisionList :: [Entity] -> Entity -> Bool
+detectCollisionList entList entRef = any (detectCollision entRef) entList
+
+detectCollisionCount :: [Entity] -> Entity -> Int
+detectCollisionCount entList entRef = length (filter (detectCollision entRef) entList)
 
 detectCollision :: Entity -> Entity -> Bool
 detectCollision ent1 ent2 = xCol && yCol
