@@ -4,7 +4,6 @@ import Graphics.Gloss
 import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
-import Data.Time.Clock
 
 ------------------------------ STATE -------------------------------
 
@@ -22,7 +21,7 @@ data Entity = Entity { position :: (Float, Float),
 -- TODO: add to state: score
 data ShooterGame = Game
     { 
-        time :: Float,
+        frameCount :: Int,
         player :: Entity,
         enemies :: [Entity],
         playerProjectiles :: [Entity],
@@ -35,9 +34,9 @@ data ShooterGame = Game
 initialState :: ShooterGame
 initialState = Game
     {
-        time = 0,
+        frameCount = 0,
         player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (150,150) 5 3 playerSideLength,
-        enemies = [ Entity (0, 0) (30, 0) 1 4 enemyBaseLength ],
+        enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
         paused = False,
@@ -56,9 +55,10 @@ weapon2 = 1
 weapon3 = 2
 
 -- Steps player takes per frame, triangular side length of player
-playerSideLength, enemyBaseLength, projectileRadius :: Float
+playerSideLength, enemyBaseLength, spawnOffset, projectileRadius :: Float
 playerSideLength = 30
 enemyBaseLength = 20
+spawnOffset = 10
 projectileRadius = 2
 
 background :: Color
@@ -189,12 +189,14 @@ firePlayerProjectiles True time weapon1 position projectiles =
 runUpdates :: Float -> ShooterGame -> ShooterGame
 runUpdates seconds game =
     -- TODO: remove "dead" entities (health <= 0)
-    game { time = (time game) + seconds,
-        playerProjectiles = firePlayerProjectiles space (time game) (activeWeapon game) (x, y) (playerProjectiles game)
+    game { frameCount = (frameCount game) + 1,
+        playerProjectiles = firePlayerProjectiles space (activeWeapon game) (x, y) (playerProjectiles game),
+        enemies = newEnemies
         }
     where
         (x, y) = position $ player game
         (w, a, s, d, space) = keysDown game
+        newEnemies = if ( ( rem ( frameCount game ) 100 ) == 0 ) then spawnEnemies (enemies game) else enemies game
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
@@ -215,6 +217,18 @@ putInBounds (xPos, yPos) radius = (xPos', yPos')
     where
         xPos' = min ( max ( xPos ) ( -fromIntegral width  / 2 + radius / 2 ) ) ( fromIntegral width  / 2 - radius / 2 )
         yPos' = min ( max ( yPos ) ( -fromIntegral height / 2 + radius / 2 ) ) ( fromIntegral height / 2 - radius / 2 )
+
+spawnEnemies :: [Entity] -> [Entity]
+spawnEnemies entList = newEntList
+    where
+        leftSpawn = -fromIntegral width / 2 + spawnOffset
+        rightSpawn = fromIntegral width / 2 - spawnOffset - enemyBaseLength
+        spawnDelta = 2 * spawnOffset + enemyBaseLength
+        spawnPoints = [ leftSpawn, leftSpawn + spawnDelta .. rightSpawn ]
+        newEntList = entList ++ map spawnEnemy spawnPoints
+
+spawnEnemy :: Float -> Entity
+spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 3 4 enemyBaseLength
 
 main :: IO ()
 main = play window background fps initialState render handleKeys update
