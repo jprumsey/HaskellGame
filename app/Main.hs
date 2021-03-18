@@ -5,6 +5,12 @@ import Graphics.Gloss.Data.Picture
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
 
+-- CONTROLS --
+-- Move: w-a-s-d
+-- Shoot: space bar
+-- New Game: n
+-- You have 5 health, to restart the game upon death press n.
+
 ------------------------------ STATE -------------------------------
 
 -- The player is a triangle
@@ -21,7 +27,6 @@ data Weapon = Weapon { wvelocity :: (Float, Float),
                        damage :: Int
                      } deriving Show
 
--- TODO: add to state: score
 data ShooterGame = Game
     { 
         frameCount :: Int,
@@ -31,7 +36,8 @@ data ShooterGame = Game
         enemyProjectiles :: [Entity],
         paused :: Bool,
         keysDown :: (Bool, Bool, Bool, Bool, Bool),
-        activeWeapon :: Weapon
+        activeWeapon :: Weapon,
+        score :: Int
     } deriving Show
 
 initialState :: ShooterGame
@@ -44,7 +50,22 @@ initialState = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = pWeapon1
+        activeWeapon = pWeapon1,
+        score = 0
+    }
+
+gameOverState :: Int -> ShooterGame
+gameOverState finalScore = Game
+    {
+        frameCount = 0,
+        player = Entity (0, 0) (0,0) 0 3 playerSideLength,
+        enemies = [],
+        playerProjectiles = [],
+        enemyProjectiles = [],
+        paused = False,
+        keysDown = (False, False, False, False, False),
+        activeWeapon = pWeapon1,
+        score = finalScore
     }
 
 width, height, offset :: Int
@@ -93,36 +114,39 @@ triangleSolid sideLength
 render :: ShooterGame  -- ^ The game state to render.
        -> Picture   -- ^ A picture of this game state.
 render game =
-  pictures [playerShip,
-            enemyShips,
-            playerProj,
-            enemyProj,
-            displayText
-            ]
-  where
-    -- text
-    displayText = uncurry translate (-fromIntegral width / 2 + 5, fromIntegral height / 2 - 20) $ uncurry scale (0.15, 0.15) $ color white $ Text ( "Lives: " ++ show (health $ player game) )
+    if (not $ alive (player game))
+        then pictures []
+    else
+        pictures [playerShip,
+                    enemyShips,
+                    playerProj,
+                    enemyProj,
+                    displayText
+                    ]
+        where
+            -- text
+            displayText = uncurry translate (-fromIntegral width / 2 + 5, fromIntegral height / 2 - 20) $ uncurry scale (0.15, 0.15) $ color white $ Text ( "Lives: " ++ show (health $ player game) )
 
-    -- the player
-    playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
-    playerColor = dark red
+            -- the player
+            playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
+            playerColor = dark red
 
-    -- the enemies
-    enemyShips = pictures ( map renderEnemy ( enemies game ) )
-    renderEnemy :: Entity -> Picture
-    renderEnemy ent = 
-        uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength
+            -- the enemies
+            enemyShips = pictures ( map renderEnemy ( enemies game ) )
+            renderEnemy :: Entity -> Picture
+            renderEnemy ent = 
+                uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength
 
-    enemyColor = dark blue -- TODO: fix so it can use multiple enemies
+            enemyColor = dark blue -- TODO: fix so it can use multiple enemies
 
-    playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
-    enemyProj  = pictures ( map (renderProjectile projectileRadius enemyProjectileColor ) (enemyProjectiles  game))
-    renderProjectile :: Float -> Color -> Entity -> Picture
-    renderProjectile radius col ent =
-        uncurry translate (position ent) $ color col $ circleSolid radius
+            playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
+            enemyProj  = pictures ( map (renderProjectile projectileRadius enemyProjectileColor ) (enemyProjectiles  game))
+            renderProjectile :: Float -> Color -> Entity -> Picture
+            renderProjectile radius col ent =
+                uncurry translate (position ent) $ color col $ circleSolid radius
 
-    playerProjectileColor = white
-    enemyProjectileColor  = white
+            playerProjectileColor = white
+            enemyProjectileColor  = white
     
 
 
@@ -153,6 +177,7 @@ handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
 -- TODO: after basics: weapon change
 
+-- TODO: implement this in update function
 -- For a 'p' keypress, pause or unpause the game
 handleKeys (EventKey (Char 'p') Down _ _) game =
  game { paused = (not (paused game)) }
@@ -177,33 +202,49 @@ moveEntities seconds game =
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
     -- TODO: remove "dead" entities (health <= 0)
-    game { frameCount = (frameCount game) + 1,
-        playerProjectiles = newPProjectiles,
-        enemyProjectiles =  newEProjectiles,
-        enemies = newEnemies
-        }
-    where
-        (x, y) = position $ player game
-        (w, a, s, d, space) = keysDown game
-        newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
-                            then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
-                            else playerProjectiles game
-        newEProjectiles = if rem (frameCount game) enemyFireRate == 0
-                            then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
-                            else enemyProjectiles game
-        newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
-                        then spawnEnemies (enemies game) 
-                        else enemies game
+    if (not $ alive (player game))
+        then gameOverState (score game)
+    else
+        game { frameCount = (frameCount game) + 1,
+            playerProjectiles = newPProjectiles,
+            enemyProjectiles =  newEProjectiles,
+            enemies = newEnemies
+            }
+        where
+            (x, y) = position $ player game
+            (w, a, s, d, space) = keysDown game
+            newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
+                                then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
+                                else playerProjectiles game
+            newEProjectiles = if rem (frameCount game) enemyFireRate == 0
+                                then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
+                                else enemyProjectiles game
+            newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
+                            then spawnEnemies (enemies game) 
+                            else enemies game
 
 handleCollisions :: ShooterGame -> ShooterGame
-handleCollisions game = game { 
+handleCollisions game = game {
+        player = (player game) { health = (health $ player game) - hitsToPlayer}, 
+        playerProjectiles = newPProjectiles,
         enemyProjectiles  = newEProjectiles,
-        enemies = newEnemies
+        enemies = newEnemies,
+        score = (score game) + killedEnemyCount
     }
     where
+        newPProjectiles = filter (not . detectCollisionList (enemies game)) (playerProjectiles game)
         newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
-        newEnemies = filter (not . detectCollision (player game)) (enemies game)
+        damagedEnemies = map (damageEnemy (playerProjectiles game)) $ filter (not . detectCollision (player game)) (enemies game)
+        newEnemies = filter alive $ damagedEnemies
+        killedEnemyCount = (length damagedEnemies) + (length newEnemies)
+        hitsToPlayer = detectCollisionCount ((enemyProjectiles game) ++ (enemies game)) (player game)
         
+alive :: Entity -> Bool
+alive ent = (health ent) > 0
+
+damageEnemy :: [Entity] -> Entity -> Entity
+damageEnemy projectiles enemy =
+    enemy { health = (health enemy) - (detectCollisionCount projectiles enemy) }
 
 -- moves player
 movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
@@ -265,6 +306,9 @@ spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 
 
 detectCollisionList :: [Entity] -> Entity -> Bool
 detectCollisionList entList entRef = any (detectCollision entRef) entList
+
+detectCollisionCount :: [Entity] -> Entity -> Int
+detectCollisionCount entList entRef = length (filter (detectCollision entRef) entList)
 
 detectCollision :: Entity -> Entity -> Bool
 detectCollision ent1 ent2 = xCol && yCol
