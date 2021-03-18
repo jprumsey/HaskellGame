@@ -196,14 +196,26 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
--- add additional weapons here
-firePlayerProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
-firePlayerProjectiles False _ _ projectiles = projectiles
-firePlayerProjectiles True weapon1 position projectiles = 
-    -- delay here?
-    (Entity position (0,150) 1 3 projectileRadius):projectiles
+-- spaceDown, time, weapon, position, currentProjectiles
+firePlayerProjectiles :: Int -> (Float, Float) -> [Entity] -> [Entity]
+firePlayerProjectiles weapon1 position projectiles = 
+        (Entity position (0,150) 1 3 projectileRadius):projectiles
 
--- fireEnemyProjectiles :: 
+-- TODO: put logic for adding new enemies and enemy projectiles here
+runUpdates :: Float -> ShooterGame -> ShooterGame
+runUpdates seconds game =
+    -- TODO: remove "dead" entities (health <= 0)
+    game { frameCount = (frameCount game) + 1,
+        playerProjectiles = firedProjectiles,
+        enemies = newEnemies
+        }
+    where
+        (x, y) = position $ player game
+        (w, a, s, d, space) = keysDown game
+        firedProjectiles = if (rem (frameCount game) 5) == 0 && space
+                            then firePlayerProjectiles (activeWeapon game) (x, y) (playerProjectiles game)
+                        else (playerProjectiles game)
+        newEnemies = if ( ( rem ( frameCount game ) 100 ) == 0 ) then spawnEnemies (enemies game) else enemies game
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
