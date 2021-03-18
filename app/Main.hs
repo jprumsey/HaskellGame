@@ -19,7 +19,7 @@ data Entity = Entity { position :: (Float, Float),
                      } deriving Show
 
 
--- TODO: add to state: active weapon
+-- TODO: add to state: score
 data ShooterGame = Game
     { 
         player :: Entity,
@@ -27,7 +27,8 @@ data ShooterGame = Game
         playerProjectiles :: [Entity],
         enemyProjectiles :: [Entity],
         paused :: Bool,
-        keysDown :: (Bool, Bool, Bool, Bool)
+        keysDown :: (Bool, Bool, Bool, Bool, Bool),
+        activeWeapon :: Int
     } deriving Show
 
 initialState :: ShooterGame
@@ -38,7 +39,8 @@ initialState = Game
         playerProjectiles = [],
         enemyProjectiles = [],
         paused = False,
-        keysDown = (False, False, False, False)
+        keysDown = (False, False, False, False, False),
+        activeWeapon = weapon1
     }
 
 width, height, offset :: Int
@@ -46,11 +48,17 @@ width = 500
 height = 500
 offset = 50
 
+weapon1, weapon2, weapon3 :: Int
+weapon1 = 0
+weapon2 = 1
+weapon3 = 2
+
 -- Steps player takes per frame, triangular side length of player
-playerSideLength, enemyBaseLength, spawnOffset :: Float
+playerSideLength, enemyBaseLength, spawnOffset, projectileRadius :: Float
 playerSideLength = 30
 enemyBaseLength = 20
 spawnOffset = 10
+projectileRadius = 2
 
 background :: Color
 background = black
@@ -62,7 +70,7 @@ fps :: Int
 fps = 60
 
 update :: Float -> ShooterGame -> ShooterGame
-update seconds game = moveEntities seconds game
+update seconds game = (runUpdates . moveEntities seconds) game
 
 ------------------------------ RENDERING -------------------------------
 -- Path representing an equilateral triangle centered about origin, with vertex pointed upwards
@@ -81,7 +89,8 @@ render :: ShooterGame  -- ^ The game state to render.
        -> Picture   -- ^ A picture of this game state.
 render game =
   pictures [playerShip,
-            enemyShips
+            enemyShips,
+            playerProj
             ]
   where
     -- the player
@@ -90,34 +99,46 @@ render game =
 
     -- the enemies
     enemyShips = pictures ( map renderEnemy ( enemies game ) )
-
     renderEnemy :: Entity -> Picture
     renderEnemy ent = 
         uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength
-    
+
     enemyColor = dark blue -- TODO: fix so it can use multiple enemies
+
+    playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
+    renderProjectile :: Float -> Color -> Entity -> Picture
+    renderProjectile radius col ent =
+        uncurry translate (position ent) $ color col $ circleSolid radius
+
+    playerProjectileColor = white
+    
 
 
 ------------------------------ CONTROLS -------------------------------
 handleKeys :: Event -> ShooterGame -> ShooterGame
 handleKeys (EventKey (Char 'w') state _ _) game = game { keysDown = updatedKeys }
     where
-        (_, a, s, d) = keysDown game
-        updatedKeys = if state == Down then (True, a, s, d) else (False, a, s, d)
+        (_, a, s, d, sp) = keysDown game
+        updatedKeys = if state == Down then (True, a, s, d, sp) else (False, a, s, d, sp)
 handleKeys (EventKey (Char 's') state _ _) game = game { keysDown = updatedKeys }
     where
-        (w, a, _, d) = keysDown game
-        updatedKeys = if state == Down then (w, a, True, d) else (w, a, False, d)
+        (w, a, _, d, sp) = keysDown game
+        updatedKeys = if state == Down then (w, a, True, d, sp) else (w, a, False, d, sp)
 handleKeys (EventKey (Char 'a') state _ _) game = game { keysDown = updatedKeys }
     where
-        (w, _, s, d) = keysDown game
-        updatedKeys = if state == Down then (w, True, s, d) else (w, False, s, d)
+        (w, _, s, d, sp) = keysDown game
+        updatedKeys = if state == Down then (w, True, s, d, sp) else (w, False, s, d, sp)
 handleKeys (EventKey (Char 'd') state _ _) game = game { keysDown = updatedKeys }
     where
-        (w, a, s, _) = keysDown game
-        updatedKeys = if state == Down then (w, a, s, True) else (w, a, s, False)
+        (w, a, s, _, sp) = keysDown game
+        updatedKeys = if state == Down then (w, a, s, True, sp) else (w, a, s, False, sp)
+handleKeys (EventKey (Char 't') state _ _) game = game { keysDown = updatedKeys }
+    where
+        (w, a, s, d, _) = keysDown game
+        updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
 
--- TODO: weapon change
+
+-- TODO: after basics: weapon change
 
 -- For a 'p' keypress, pause or unpause the game
 handleKeys (EventKey (Char 'p') Down _ _) game =
@@ -130,12 +151,13 @@ moveEntities :: Float -> ShooterGame -> ShooterGame
 moveEntities seconds game = 
     game { 
         enemies = map (moveNonPlayer seconds) (enemies game),
-        player = movePlayer seconds (keysDown game) (player game)
+        player = movePlayer seconds (keysDown game) (player game),
+        playerProjectiles = map (moveNonPlayer seconds) (playerProjectiles game)
         }
 
 -- moves player
-movePlayer :: Float -> (Bool, Bool, Bool, Bool) -> Entity -> Entity
-movePlayer seconds (w, a, s, d) ent = ent { position = newPos }
+movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
+movePlayer seconds (w, a, s, d, sp) ent = ent { position = newPos }
     where
         (xPos, yPos) = position ent
         (xVel, yVel) = velocity ent
@@ -152,6 +174,25 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
+-- add additional weapons here
+playerFireProjectiles :: Bool -> Int -> (Float, Float) -> [Entity] -> [Entity]
+playerFireProjectiles spaceDown weaponType position projectiles = 
+    if spaceDown
+        then 
+            if weaponType == weapon1
+                then
+                    (Entity position (0,150) 1 3 projectileRadius):projectiles
+            else projectiles
+    else
+        projectiles
+
+-- TODO: put logic for adding new enemies and enemy projectiles here
+runUpdates :: ShooterGame -> ShooterGame
+runUpdates game =
+    game { playerProjectiles = playerFireProjectiles space (activeWeapon game) (x, y) (playerProjectiles game)}
+    where
+        (x, y) = position $ player game
+        (w, a, s, d, space) = keysDown game
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
