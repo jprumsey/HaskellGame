@@ -172,7 +172,6 @@ moveEntities seconds game =
 
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
-    -- TODO: remove "dead" entities (health <= 0)
     game { frameCount = (frameCount game) + 1,
         playerProjectiles = newPProjectiles,
         enemyProjectiles =  newEProjectiles,
@@ -192,13 +191,16 @@ runUpdates game =
                         else enemies game
 
 handleCollisions :: ShooterGame -> ShooterGame
-handleCollisions game = game { 
+handleCollisions game = game {
+        player = newPlayer, 
         enemyProjectiles  = newEProjectiles,
         enemies = newEnemies
     }
     where
         newEProjectiles = filter (not . detectCollision (player game)) (enemyProjectiles game)
         newEnemies = filter (not . detectCollision (player game)) (enemies game)
+        hitsToPlayer = detectCollisionList ((enemyProjectiles game) ++ (enemies game)) (player game)
+        newPlayer = (player game) { health = (health $ player game) - hitsToPlayer}
         
 
 -- moves player
@@ -259,8 +261,8 @@ spawnEnemies entList = newEntList
 spawnEnemy :: Float -> Entity
 spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 3 4 enemyBaseLength
 
-detectCollisionList :: [Entity] -> Entity -> Bool
-detectCollision entList entRef = any (detectCollision entRef) entList
+detectCollisionList :: [Entity] -> Entity -> Int
+detectCollisionList entList entRef = length (filter (detectCollision entRef) entList)
 
 detectCollision :: Entity -> Entity -> Bool
 detectCollision ent1 ent2 = xCol && yCol
