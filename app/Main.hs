@@ -6,10 +6,10 @@ import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Pure.Game
 
 
--- TODO: fix game so that movement happens when a key is /held/, not just when it is pressed individually (kind of tricky with event keys) https://stackoverflow.com/questions/52871673/haskell-gloss-do-something-every-frame-key-is-pressed
 ------------------------------ STATE -------------------------------
 
--- All ships - the player and enemies - are triangles
+-- The player is a triangle
+-- The ships are squares
 -- All projectiles are circles whose health should be initialized to 1 and decremented to 0 upon use
 data Entity = Entity { position :: (Float, Float),
                      velocity :: (Float, Float),
@@ -45,8 +45,9 @@ height = 500
 offset = 50
 
 -- Steps player takes per frame, triangular side length of player
-playerSideLength :: Float
+playerSideLength, enemyBaseLength :: Float
 playerSideLength = 30
+enemyBaseLength = 15
 
 background :: Color
 background = black
@@ -118,7 +119,16 @@ movePlayer seconds game = game { player = newPlayer }
         (xVel, yVel) = velocity playerEnt
         xPos' = xPos + fromIntegral ( fromEnum d - fromEnum a ) * xVel * seconds
         yPos' = yPos + fromIntegral ( fromEnum w - fromEnum s ) * yVel * seconds
-        newPlayer = playerEnt { position = (xPos', yPos') }
+        newPlayer = playerEnt { position = putInBounds (xPos', yPos') ( getCircRadius playerSideLength 3 ) }
+
+getCircRadius :: Float -> Float -> Float
+getCircRadius sideLength numSides = sideLength / ( 2 * cos ( pi / numSides ) )
+
+putInBounds :: (Float, Float) -> Float -> (Float, Float)
+putInBounds (xPos, yPos) radius = (xPos', yPos')
+    where
+        xPos' = min ( max ( xPos ) ( -fromIntegral width  / 2 + radius / 2 ) ) ( fromIntegral width  / 2 - radius / 2 )
+        yPos' = min ( max ( yPos ) ( -fromIntegral height / 2 + radius / 2 ) ) ( fromIntegral height / 2 - radius / 2 )
 
 main :: IO ()
 main = play window background fps initialState render handleKeys update
