@@ -14,8 +14,8 @@ import Graphics.Gloss.Interface.Pure.Game
 ------------------------------ STATE -------------------------------
 
 -- The player is a triangle
--- The ships are squares
--- All projectiles are circles whose health should be initialized to 1 and decremented to 0 upon use
+-- The enemy ships are squares
+-- All projectiles are circles whose health should be initialized to 1
 data Entity = Entity { position :: (Float, Float),
                      evelocity :: (Float, Float),
                      health :: Int,
@@ -23,9 +23,7 @@ data Entity = Entity { position :: (Float, Float),
                      sideLength :: Float
                      } deriving Show
 
-data Weapon = Weapon { wvelocity :: (Float, Float),
-                       damage :: Int
-                     } deriving Show
+data Weapon = EWeapon1 | PWeapon1 deriving Show
 
 data ShooterGame = Game
     { 
@@ -50,7 +48,7 @@ initialState = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = pWeapon1,
+        activeWeapon = PWeapon1,
         score = 0
     }
 
@@ -64,7 +62,7 @@ gameOverState finalScore = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = pWeapon1,
+        activeWeapon = PWeapon1,
         score = finalScore
     }
 
@@ -73,9 +71,9 @@ width = 500
 height = 500
 offset = 50
 
-eWeapon1, pWeapon1 :: Weapon
-eWeapon1 = Weapon { wvelocity = (0, -150), damage = 1 }
-pWeapon1 = Weapon { wvelocity = (0,  150), damage = 1 }
+--eWeapon1, pWeapon1 :: Weapon
+--eWeapon1 = Weapon { wvelocity = (0, -150)}
+--pWeapon1 = Weapon { wvelocity = (0,  150)}
 
 playerFireRate, enemyFireRate, enemySpawnRate :: Int
 playerFireRate = 10
@@ -220,7 +218,7 @@ runUpdates game =
                                 then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
                                 else playerProjectiles game
             newEProjectiles = if rem (frameCount game) enemyFireRate == 0
-                                then (map (fireProjectile eWeapon1) (enemies game))++(enemyProjectiles game)
+                                then (map (fireProjectile EWeapon1) (enemies game))++(enemyProjectiles game)
                                 else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
@@ -269,11 +267,8 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         yPos' = yPos + yVel * seconds
 
 fireProjectile :: Weapon -> Entity -> Entity
-fireProjectile weapon ent = Entity (position ent) 
-                                   (wvelocity weapon)
-                                   (damage weapon)
-                                   1
-                                   projectileRadius
+fireProjectile EWeapon1 ent = Entity (position ent) (0,-150) 1 1 projectileRadius
+fireProjectile PWeapon1 ent = Entity (position ent) (0, 150) 1 1 projectileRadius
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
