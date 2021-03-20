@@ -23,6 +23,7 @@ data Entity = Entity { position :: (Float, Float),
                      sideLength :: Float
                      } deriving Show
 
+-- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
 data Weapon = EWeapon1 | PWeapon1 deriving Show
 
 data ShooterGame = Game
@@ -52,6 +53,7 @@ initialState = Game
         score = 0
     }
 
+-- State upon loss
 gameOverState :: Int -> ShooterGame
 gameOverState finalScore = Game
     {
@@ -66,6 +68,7 @@ gameOverState finalScore = Game
         score = finalScore
     }
 
+-- Window width, height, offset
 width, height, offset :: Int
 width = 500
 height = 500
@@ -173,10 +176,9 @@ handleKeys (EventKey (SpecialKey KeySpace) state _ _) game = game { keysDown = u
     where
         (w, a, s, d, _) = keysDown game
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
+handleKeys (EventKey (Char 'h') _ _ _) game = game { activeWeapon = PWeapon1 }
 handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
-
--- TODO: after basics: weapon change
 
 -- TODO: implement this in update function
 -- For a 'p' keypress, pause or unpause the game
