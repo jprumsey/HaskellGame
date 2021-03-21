@@ -29,7 +29,7 @@ data Entity = Entity { position :: (Float, Float),
             } deriving Show
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
-data Weapon = EWeapon1 | StandardProj | ExplosiveProj | FreezeProj deriving Show
+data Weapon = EWeapon | StandardProj | ExplosiveProj | FreezeProj deriving Show
 
 data Effect = None | Explosive | Freeze | Frozen deriving (Show, Eq)
 
@@ -226,14 +226,14 @@ runUpdates game =
             playerCooldownTime = (frameCount game) - (lastShot $ player game) -- Time elapsed since last firing of projectile, used with weapons who have a cooldown/reload time
             (x, y) = position $ player game
             (w, a, s, d, space) = keysDown game
-            aliveAndInBounds x = (alive x) && (inBounds x)
+            aliveAndInBounds ent = (alive ent) && (inBoundsY ent)
             newPProjectiles = filter aliveAndInBounds $ 
                                 if space
                                     then (fireProjectile (activeWeapon game) (frameCount game) (player game)) ++ (playerProjectiles game)
                                     else playerProjectiles game
             newEProjectiles = filter aliveAndInBounds $
                                 if rem (frameCount game) enemyFireRate == 0
-                                    then (concatMap (fireProjectile EWeapon1 (frameCount game)) (filter (not . isFrozen) (enemies game))) ++ (enemyProjectiles game)
+                                    then (concatMap (fireProjectile EWeapon (frameCount game)) (filter (not . isFrozen) (enemies game))) ++ (enemyProjectiles game)
                                     else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
@@ -309,18 +309,27 @@ movePlayer seconds (w, a, s, d, sp) ent = ent { position = newPos }
 
 -- moves all other entities
 moveNonPlayer :: Float -> Entity -> Entity
-moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
+moveNonPlayer seconds ent = ent { position = (xPos', yPos'), evelocity = (xVel', yVel) }
     where
         (xPos, yPos) = position ent
         (xVel, yVel) = evelocity ent
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
+        awayFromCenter = if (signum xPos') == (signum xVel) then True else False 
+        xVel' = if ( ( not ( inBoundsX ent ) ) && awayFromCenter ) 
+            then -xVel
+            else xVel
 
 -- Returns a projectile to allow for weapons and enemies to fire multiple at once
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
-fireProjectile EWeapon1 currTime ent = 
-    if currTime - (lastShot ent) >= enemyFireRate 
-        then [Entity (position ent) (0, -150) 1 1 projectileRadius None 0] else []
+fireProjectile EWeapon currTime ent = 
+    if (effect ent) == Explosive
+        then if currTime - (lastShot ent) >= enemyFireRate * 12
+            then [Entity (position ent) (0, -90) 1 1 projectileRadius Explosive 0]
+            else []
+        else if currTime - (lastShot ent) >= enemyFireRate
+            then [Entity (position ent) (0, -150) 1 1 projectileRadius None 0]
+            else []
 fireProjectile StandardProj currTime ent = 
     if currTime - (lastShot ent) >= playerFireRate
         then [Entity (position ent) (0, 150) 1 1 projectileRadius None 0] else []
@@ -332,12 +341,17 @@ fireProjectile FreezeProj currTime ent =
         then [Entity (position ent) (0, 110) 1 1 projectileRadius Freeze 0] else []
 
 -- Will be useful when determining if projectiles should be removed
-inBounds :: Entity -> Bool
-inBounds ent = (not xOOB) && (not yOOB)
+inBoundsX :: Entity -> Bool
+inBoundsX ent = (not xOOB)
     where
-        (xPos, yPos) = position ent
+        (xPos, _) = position ent
         r = getCircRadius ent
         xOOB = ( ( xPos - r ) < ( -fromIntegral width  / 2 ) ) || ( ( xPos + r ) > ( fromIntegral width  / 2 ) )
+inBoundsY :: Entity -> Bool
+inBoundsY ent = (not yOOB)
+    where
+        (_, yPos) = position ent
+        r = getCircRadius ent
         yOOB = ( ( yPos - r ) < ( -fromIntegral height / 2 ) ) || ( ( yPos + r ) > ( fromIntegral height / 2 ) )
 
 -- Gets the circumradius of the described regular polynomial, use this for collisions
@@ -358,10 +372,14 @@ spawnEnemies entList = newEntList
         rightSpawn = fromIntegral width / 2 - spawnOffset - enemyBaseLength
         spawnDelta = 2 * spawnOffset + enemyBaseLength
         spawnPoints = [ leftSpawn, leftSpawn + 2 * spawnDelta .. rightSpawn ]
-        newEntList = entList ++ map spawnEnemy spawnPoints
+        enemyPattern = [ 1,2..(length spawnPoints) ]
+        newEntList = entList ++ ( map (\(a,b) -> spawnEnemy a b) $ zip enemyPattern spawnPoints )
 
-spawnEnemy :: Float -> Entity
-spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None (-1000)
+spawnEnemy :: Int -> Float -> Entity
+spawnEnemy pattern xCor 
+    | rem pattern 3 == 0 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None (-1000)
+    | rem pattern 3 == 1 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (fromIntegral (signum ( rem pattern 2 - 1)) * 100, -40) 1 4 enemyBaseLength None (-1000)
+    | rem pattern 3 == 2 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -30) 1 4 enemyBaseLength Explosive (-1000)
 
 -- Adds and removes necessary projectiles upon detonation (m key)
 detonateExplosives :: [Entity] -> [Entity]
@@ -385,14 +403,15 @@ basicSplit :: Entity -> [Entity]
 basicSplit ent = 
     [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius None 0), 
     (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius None 0),
-    (Entity (xPos, yPos) (diag, -diag) 1 1 projectileRadius None 0),
-    (Entity (xPos, yPos) (-diag, -diag) 1 1 projectileRadius None 0),
-    (Entity (xPos, yPos) (yVel, 0) 1 1 projectileRadius None 0),
-    (Entity (xPos, yPos) (-yVel, 0) 1 1 projectileRadius None 0)]
+    (Entity (xPos, yPos) (diag, -diag / 2) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (-diag, -diag / 2) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (yVel, diag / 2) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (-yVel, diag / 2) 1 1 projectileRadius None 0)]
     where
         (xPos, yPos) = (position ent)
         (_, yVel) = (evelocity ent)
         diag = yVel * (1/(sqrt 2))
+        flat = (signum yVel) * 10
 
 
 main :: IO ()
