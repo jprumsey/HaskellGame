@@ -31,6 +31,7 @@ data Entity = Entity { position :: (Float, Float),
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
 data Weapon = EWeapon | StandardProj | ExplosiveProj | FreezeProj deriving Show
 
+
 data Effect = None | Explosive | Freeze | Frozen deriving (Show, Eq)
 
 data ShooterGame = Game
@@ -116,11 +117,17 @@ triangleSolid :: Float -> Picture
 triangleSolid sideLength
     = Polygon $ trianglePath sideLength
 
+getWeaponText :: Weapon -> String
+getWeaponText StandardProj = "Standard Missiles"
+getWeaponText ExplosiveProj = "Explosive Missiles (press F to detonate)"
+getWeaponText FreezeProj = "Freeze Ray"
+getWeaponText _ = "Unknown"
+
 render :: ShooterGame  -- ^ The game state to render.
        -> Picture   -- ^ A picture of this game state.
 render game =
     if (not $ alive (player game))
-        then pictures []
+        then pictures [gameOverText]
     else
         pictures [playerShip,
                     enemyShips,
@@ -131,12 +138,15 @@ render game =
         where
             -- text
             displayText = uncurry translate (-fromIntegral width / 2 + 5, fromIntegral height / 2 - 20) 
+                $ uncurry scale (0.10, 0.10) 
+                $ color white 
+                $ Text ( "Lives: " ++ show (health $ player game) ++ " Score: " ++ show (score game) ++ " Current Weapon: " ++ getWeaponText (activeWeapon game)) 
+            
+            gameOverText = uncurry translate ((-fromIntegral width) / 2 + 40, 0) 
                 $ uncurry scale (0.15, 0.15) 
                 $ color white 
-                $ Text ( "Lives: " ++ show (health $ player game) ++ " Score: " ++ show (score game) )
-
-            -- TODO: display the current weapon, need to map text strings to actual weapon name
-            -- the player
+                $ Text ("Game Over! Press N to retry. Score: " ++ show (score game))
+            
             playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
             playerColor = dark red
 
