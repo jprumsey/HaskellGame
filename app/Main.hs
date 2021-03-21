@@ -25,11 +25,13 @@ data Entity = Entity { position :: (Float, Float),
                      health :: Int,
                      numSides :: Float,
                      sideLength :: Float,
-                     explosive :: Bool -- deprecate if needed
+                     effect :: Effect
                      } deriving Show
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
 data Weapon = EWeapon1 | StandardProj | SplittingProj deriving Show
+
+data Effect = None | Explosive | Freeze deriving (Show, Eq)
 
 data ShooterGame = Game
     { 
@@ -49,7 +51,7 @@ initialState :: ShooterGame
 initialState = Game
     {
         frameCount = 0,
-        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength False,
+        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength None,
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
@@ -65,7 +67,7 @@ gameOverState :: Int -> ShooterGame
 gameOverState finalScore = Game
     {
         frameCount = 0,
-        player = Entity (0, 0) (0,0) 0 3 playerSideLength False,
+        player = Entity (0, 0) (0,0) 0 3 playerSideLength None,
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
@@ -286,14 +288,14 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         yPos' = yPos + yVel * seconds
 
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
-fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius False]
+fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius None]
 fireProjectile StandardProj cooldownTime ent = 
     if cooldownTime >= 10 -- TODO: change in terms of fps
-        then [Entity (position ent) (0, 150) 1 1 projectileRadius False]
+        then [Entity (position ent) (0, 150) 1 1 projectileRadius None]
         else []
 fireProjectile SplittingProj cooldownTime ent = 
     if cooldownTime >= fps * 2
-        then [Entity (position ent) (0, 90) 1 1 projectileRadius True]
+        then [Entity (position ent) (0, 90) 1 1 projectileRadius Explosive]
         else []
 
 -- Will be useful when determining if projectiles should be removed
@@ -326,7 +328,7 @@ spawnEnemies entList = newEntList
         newEntList = entList ++ map spawnEnemy spawnPoints
 
 spawnEnemy :: Float -> Entity
-spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength False
+spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None
 
 detectCollisionList :: [Entity] -> Entity -> Bool
 detectCollisionList entList entRef = any (detectCollision entRef) entList
@@ -349,7 +351,7 @@ detonateExplosives :: [Entity] -> [Entity]
 detonateExplosives projs = updatedProjectiles
     where 
         isExplosive :: Entity -> Bool
-        isExplosive ent = (explosive ent)
+        isExplosive ent = (effect ent) == Explosive
 
         removedExplosive :: Entity -> Entity
         removedExplosive ent = if (isExplosive ent)
@@ -364,12 +366,12 @@ detonateExplosives projs = updatedProjectiles
 -- Returns four entities each with velocity 45 degrees from axes (all four directions diagonally)
 basicSplit :: Entity -> [Entity]
 basicSplit ent = 
-    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius False), 
-    (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius False),
-    (Entity (xPos, yPos) (diag, -diag) 1 1 projectileRadius False),
-    (Entity (xPos, yPos) (-diag, -diag) 1 1 projectileRadius False),
-    (Entity (xPos, yPos) (yVel, 0) 1 1 projectileRadius False),
-    (Entity (xPos, yPos) (-yVel, 0) 1 1 projectileRadius False)]
+    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius None), 
+    (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius None),
+    (Entity (xPos, yPos) (diag, -diag) 1 1 projectileRadius None),
+    (Entity (xPos, yPos) (-diag, -diag) 1 1 projectileRadius None),
+    (Entity (xPos, yPos) (yVel, 0) 1 1 projectileRadius None),
+    (Entity (xPos, yPos) (-yVel, 0) 1 1 projectileRadius None)]
     where
         (xPos, yPos) = (position ent)
         (_, yVel) = (evelocity ent)
