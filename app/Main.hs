@@ -24,8 +24,9 @@ data Entity = Entity { position :: (Float, Float),
                      health :: Int,
                      numSides :: Float,
                      sideLength :: Float,
-                     effect :: Effect
-                     } deriving Show
+                     effect :: Effect,
+                     lastShot :: Int -- Useful for players and enemies only, should be set to a large negative value on start
+            } deriving Show
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
 data Weapon = EWeapon1 | StandardProj | ExplosiveProj | FreezeProj deriving Show
@@ -42,23 +43,21 @@ data ShooterGame = Game
         paused :: Bool,
         keysDown :: (Bool, Bool, Bool, Bool, Bool),
         activeWeapon :: Weapon,
-        score :: Int,
-        lastShot :: Int
+        score :: Int
     } deriving Show
 
 initialState :: ShooterGame
 initialState = Game
     {
         frameCount = 0,
-        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength None,
+        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength None (-1000),
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
         activeWeapon = StandardProj,
-        score = 0,
-        lastShot = (-30)
+        score = 0
     }
 
 -- State upon loss
@@ -66,15 +65,14 @@ gameOverState :: Int -> ShooterGame
 gameOverState finalScore = Game
     {
         frameCount = 0,
-        player = Entity (0, 0) (0,0) 0 3 playerSideLength None,
+        player = Entity (0, 0) (0,0) 0 3 playerSideLength None (-1000),
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
         activeWeapon = StandardProj,
-        score = finalScore,
-        lastShot = 0
+        score = finalScore
     }
 
 -- Window width, height, offset
@@ -83,6 +81,7 @@ width = 500
 height = 500
 offset = 50
 
+-- Deprecated, using a cooldown time now
 playerFireRate, enemyFireRate, enemySpawnRate :: Int
 playerFireRate = 10
 enemyFireRate = 100
@@ -221,27 +220,27 @@ runUpdates game =
             playerProjectiles = newPProjectiles,
             enemyProjectiles =  newEProjectiles,
             enemies = newEnemies,
-            lastShot = newLastShot
+            player = (player game) { lastShot = newPlayerLastShot }
             }
         where
-            cooldownTime = (frameCount game) - (lastShot game) -- Time elapsed since last firing of projectile, used with weapons who have a cooldown/reload time
+            playerCooldownTime = (frameCount game) - (lastShot $ player game) -- Time elapsed since last firing of projectile, used with weapons who have a cooldown/reload time
             (x, y) = position $ player game
             (w, a, s, d, space) = keysDown game
-            -- todo: do we need this player fire rate if using a cooldown?
-            newPProjectiles = filter alive $ 
+            aliveAndInBounds x = (alive x) && (inBounds x)
+            newPProjectiles = filter aliveAndInBounds $ 
                                 if space
-                                    then (fireProjectile (activeWeapon game) cooldownTime (player game))++(playerProjectiles game)
+                                    then (fireProjectile (activeWeapon game) (frameCount game) (player game)) ++ (playerProjectiles game)
                                     else playerProjectiles game
-            newEProjectiles = filter alive $
+            newEProjectiles = filter aliveAndInBounds $
                                 if rem (frameCount game) enemyFireRate == 0
-                                    then (concatMap (fireProjectile EWeapon1 cooldownTime) (filter (not . isFrozen) (enemies game))) ++ (enemyProjectiles game)
+                                    then (concatMap (fireProjectile EWeapon1 (frameCount game)) (filter (not . isFrozen) (enemies game))) ++ (enemyProjectiles game)
                                     else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
                             else enemies game
-            newLastShot = if (length newPProjectiles) > (length $ playerProjectiles game)
+            newPlayerLastShot = if (length newPProjectiles) > (length $ playerProjectiles game)
                             then frameCount game
-                            else lastShot game
+                            else (lastShot $ player game)
             isFrozen :: Entity -> Bool
             isFrozen ent = (effect ent) == Frozen
 
@@ -281,7 +280,7 @@ detectCollision ent1 ent2 = xCol && yCol
         yCol = (yPos1 + r1) > (yPos2-r2) && (yPos1 - r1) < (yPos2 + r2)
 
 alive :: Entity -> Bool
-alive ent = (health ent) > 0 && inBounds ent
+alive ent = (health ent) > 0
 
 damageEnemy :: [Entity] -> Entity -> Entity
 damageEnemy projectiles enemy =
@@ -319,16 +318,16 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
 
 -- Returns a projectile to allow for weapons and enemies to fire multiple at once
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
-fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius None]
-fireProjectile StandardProj cooldownTime ent = 
-    if cooldownTime >= 10 -- TODO: change in terms of fps
-        then [Entity (position ent) (0, 150) 1 1 projectileRadius None] else []
-fireProjectile ExplosiveProj cooldownTime ent = 
-    if cooldownTime >= fps * 2
-        then [Entity (position ent) (0, 90) 1 1 projectileRadius Explosive] else []
-fireProjectile FreezeProj cooldownTime ent =
-    if cooldownTime >= fps
-        then [Entity (position ent) (0, 110) 1 1 projectileRadius Freeze] else []
+fireProjectile EWeapon1 _ ent = []
+fireProjectile StandardProj currTime ent = 
+    if currTime - (lastShot ent) >= 10 -- TODO: change in terms of fps
+        then [Entity (position ent) (0, 150) 1 1 projectileRadius None 0] else []
+fireProjectile ExplosiveProj currTime ent = 
+    if currTime - (lastShot ent) >= fps * 2
+        then [Entity (position ent) (0, 90) 1 1 projectileRadius Explosive 0] else []
+fireProjectile FreezeProj currTime ent =
+    if currTime - (lastShot ent) >= fps
+        then [Entity (position ent) (0, 110) 1 1 projectileRadius Freeze 0] else []
 
 -- Will be useful when determining if projectiles should be removed
 inBounds :: Entity -> Bool
@@ -360,7 +359,7 @@ spawnEnemies entList = newEntList
         newEntList = entList ++ map spawnEnemy spawnPoints
 
 spawnEnemy :: Float -> Entity
-spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None
+spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None (-1000)
 
 -- Adds and removes necessary projectiles upon detonation (m key)
 detonateExplosives :: [Entity] -> [Entity]
@@ -382,12 +381,12 @@ detonateExplosives projs = updatedProjectiles
 -- Returns four entities each with velocity 45 degrees from axes (all four directions diagonally)
 basicSplit :: Entity -> [Entity]
 basicSplit ent = 
-    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius None), 
-    (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius None),
-    (Entity (xPos, yPos) (diag, -diag) 1 1 projectileRadius None),
-    (Entity (xPos, yPos) (-diag, -diag) 1 1 projectileRadius None),
-    (Entity (xPos, yPos) (yVel, 0) 1 1 projectileRadius None),
-    (Entity (xPos, yPos) (-yVel, 0) 1 1 projectileRadius None)]
+    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius None 0), 
+    (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (diag, -diag) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (-diag, -diag) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (yVel, 0) 1 1 projectileRadius None 0),
+    (Entity (xPos, yPos) (-yVel, 0) 1 1 projectileRadius None 0)]
     where
         (xPos, yPos) = (position ent)
         (_, yVel) = (evelocity ent)
