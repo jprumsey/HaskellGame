@@ -318,15 +318,17 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
 
 -- Returns a projectile to allow for weapons and enemies to fire multiple at once
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
-fireProjectile EWeapon1 _ ent = []
+fireProjectile EWeapon1 currTime ent = 
+    if currTime - (lastShot ent) >= enemyFireRate 
+        then [Entity (position ent) (0, -150) 1 1 projectileRadius None 0] else []
 fireProjectile StandardProj currTime ent = 
-    if currTime - (lastShot ent) >= 10 -- TODO: change in terms of fps
+    if currTime - (lastShot ent) >= playerFireRate
         then [Entity (position ent) (0, 150) 1 1 projectileRadius None 0] else []
 fireProjectile ExplosiveProj currTime ent = 
-    if currTime - (lastShot ent) >= fps * 2
+    if currTime - (lastShot ent) >= playerFireRate * 12
         then [Entity (position ent) (0, 90) 1 1 projectileRadius Explosive 0] else []
 fireProjectile FreezeProj currTime ent =
-    if currTime - (lastShot ent) >= fps
+    if currTime - (lastShot ent) >= playerFireRate * 6
         then [Entity (position ent) (0, 110) 1 1 projectileRadius Freeze 0] else []
 
 -- Will be useful when determining if projectiles should be removed
