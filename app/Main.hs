@@ -335,7 +335,7 @@ fireProjectile :: Weapon -> Int -> Entity -> [Entity]
 fireProjectile EWeapon currTime ent = 
     if (effect ent) == Explosive
         then if currTime - (lastShot ent) >= enemyFireRate * 12
-            then [Entity (position ent) (0, -90) 1 1 projectileRadius Explosive 0]
+            then [Entity (position ent) (-90, -90) 1 1 projectileRadius None 0, Entity (position ent) (0, -90) 1 1 projectileRadius None 0, Entity (position ent) (90, -90) 1 1 projectileRadius None 0]
             else []
         else if currTime - (lastShot ent) >= enemyFireRate
             then [Entity (position ent) (0, -150) 1 1 projectileRadius None 0]
@@ -387,9 +387,9 @@ spawnEnemies entList = newEntList
 
 spawnEnemy :: Int -> Float -> Entity
 spawnEnemy pattern xCor 
-    | rem pattern 3 == 0 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None (-1000)
-    | rem pattern 3 == 1 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (fromIntegral (signum ( rem pattern 2 - 1)) * 100, -40) 1 4 enemyBaseLength None (-1000)
-    | rem pattern 3 == 2 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -30) 1 4 enemyBaseLength Explosive (-1000)
+    | rem pattern 7 == 3 || rem pattern 7 == 5 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (fromIntegral (signum ( rem pattern 3 - 1)) * 100, -40) 1 4 enemyBaseLength None (-1000)
+    | rem pattern 7 == 4 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -30) 1 4 enemyBaseLength Explosive (-1000)
+    | otherwise = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None (-1000)
 
 -- Adds and removes necessary projectiles upon detonation (m key)
 detonateExplosives :: [Entity] -> [Entity]
