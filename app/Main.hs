@@ -9,14 +9,13 @@ import Graphics.Gloss.Interface.Pure.Game
 -- Move: w-a-s-d
 -- Fire: space bar
 -- Weapons:
---  h: Standard Projectiles
---  j: Exploding Projectiles, use f to detonate
---  k: TBD
+--  h: Standard Projectiles, deal 1 damage
+--  j: Exploding Projectiles, use f to detonate to spawn 6 sub-bullets
+--  k: Freeze Ray, immobilizes target
 -- New Game: n
 -- You have 5 health, to restart the game upon death press n.
 
 ------------------------------ STATE -------------------------------
-
 -- The player is a triangle
 -- The enemy ships are squares
 -- All projectiles are circles whose health should be initialized to 1
@@ -29,9 +28,9 @@ data Entity = Entity { position :: (Float, Float),
                      } deriving Show
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
-data Weapon = EWeapon1 | StandardProj | SplittingProj deriving Show
+data Weapon = EWeapon1 | StandardProj | ExplosiveProj | FreezeProj deriving Show
 
-data Effect = None | Explosive | Freeze deriving (Show, Eq)
+data Effect = None | Explosive | Freeze | Frozen deriving (Show, Eq)
 
 data ShooterGame = Game
     { 
@@ -83,10 +82,6 @@ width, height, offset :: Int
 width = 500
 height = 500
 offset = 50
-
---eWeapon1, pWeapon1 :: Weapon
---eWeapon1 = Weapon { wvelocity = (0, -150)}
---pWeapon1 = Weapon { wvelocity = (0,  150)}
 
 playerFireRate, enemyFireRate, enemySpawnRate :: Int
 playerFireRate = 10
@@ -154,17 +149,20 @@ render game =
 
             enemyColor = dark blue -- TODO: fix so it can use multiple enemies
 
-            playerProj = pictures ( map (renderProjectile projectileRadius playerProjectileColor) (playerProjectiles game))
-            enemyProj  = pictures ( map (renderProjectile projectileRadius enemyProjectileColor ) (enemyProjectiles  game))
-            renderProjectile :: Float -> Color -> Entity -> Picture
-            renderProjectile radius col ent =
-                uncurry translate (position ent) $ color col $ circleSolid radius
+            playerProj = pictures ( map (renderProjectile) (playerProjectiles game))
+            enemyProj  = pictures ( map (renderProjectile) (enemyProjectiles  game))
 
-            playerProjectileColor = dark red
-            enemyProjectileColor  = white
-
+            renderProjectile :: Entity -> Picture
+            renderProjectile ent = uncurry translate (position ent) $ color col $ circleSolid radius
+                where
+                    radius = (sideLength ent)
+                    col = case (effect ent) of
+                        Explosive -> dark red
+                        Freeze -> cyan
+                        _ -> white
 
 ------------------------------ CONTROLS -------------------------------
+
 handleKeys :: Event -> ShooterGame -> ShooterGame
 handleKeys (EventKey (Char 'w') state _ _) game = game { keysDown = updatedKeys }
     where
@@ -187,7 +185,8 @@ handleKeys (EventKey (SpecialKey KeySpace) state _ _) game = game { keysDown = u
         (w, a, s, d, _) = keysDown game
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
 handleKeys (EventKey (Char 'h') _ _ _) game = game { activeWeapon = StandardProj }
-handleKeys (EventKey (Char 'j') _ _ _) game = game { activeWeapon = SplittingProj }
+handleKeys (EventKey (Char 'j') _ _ _) game = game { activeWeapon = ExplosiveProj }
+handleKeys (EventKey (Char 'k') _ _ _) game = game { activeWeapon = FreezeProj }
 handleKeys (EventKey (Char 'f') _ _ _) game = game { playerProjectiles = detonateExplosives (playerProjectiles game)}
 handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
@@ -200,7 +199,6 @@ handleKeys (EventKey (Char 'p') Down _ _) game =
 handleKeys _ game = game
 
 ------------------------------ UPDATES -------------------------------
-
 update :: Float -> ShooterGame -> ShooterGame
 update seconds = handleCollisions . runUpdates . moveEntities seconds
 
@@ -236,7 +234,7 @@ runUpdates game =
                                     else playerProjectiles game
             newEProjectiles = filter alive $
                                 if rem (frameCount game) enemyFireRate == 0
-                                    then (concatMap (fireProjectile EWeapon1 cooldownTime) (enemies game)) ++ (enemyProjectiles game)
+                                    then (concatMap (fireProjectile EWeapon1 cooldownTime) (filter (not . isFrozen) (enemies game))) ++ (enemyProjectiles game)
                                     else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
@@ -244,6 +242,8 @@ runUpdates game =
             newLastShot = if (length newPProjectiles) > (length $ playerProjectiles game)
                             then frameCount game
                             else lastShot game
+            isFrozen :: Entity -> Bool
+            isFrozen ent = (effect ent) == Frozen
 
 handleCollisions :: ShooterGame -> ShooterGame
 handleCollisions game = game {
@@ -260,13 +260,43 @@ handleCollisions game = game {
         newEnemies = filter alive $ damagedEnemies
         killedEnemyCount = (length damagedEnemies) - (length newEnemies)
         hitsToPlayer = detectCollisionCount ((enemyProjectiles game) ++ (enemies game)) (player game)
-        
+
+-- Returns true if any of entList has collided with entRef
+detectCollisionList :: [Entity] -> Entity -> Bool
+detectCollisionList entList entRef = any (detectCollision entRef) entList
+
+-- Returns number of collisions between entRef and any of EntList
+detectCollisionCount :: [Entity] -> Entity -> Int
+detectCollisionCount entList entRef = length (filter (detectCollision entRef) entList)
+
+-- Returns true if ent1 and ent2 collide
+detectCollision :: Entity -> Entity -> Bool
+detectCollision ent1 ent2 = xCol && yCol
+    where
+        r1 = getCircRadius ent1
+        (xPos1, yPos1) = position ent1
+        r2 = getCircRadius ent2
+        (xPos2, yPos2) = position ent2
+        xCol = (xPos1 + r1) > (xPos2-r2) && (xPos1 - r1) < (xPos2 + r2)
+        yCol = (yPos1 + r1) > (yPos2-r2) && (yPos1 - r1) < (yPos2 + r2)
+
 alive :: Entity -> Bool
-alive ent = (health ent) > 0
+alive ent = (health ent) > 0 && inBounds ent
 
 damageEnemy :: [Entity] -> Entity -> Entity
 damageEnemy projectiles enemy =
-    enemy { health = (health enemy) - (detectCollisionCount projectiles enemy) }
+    enemy { health = (health enemy) - (detectCollisionCount standardProj enemy),
+            evelocity = updatedVel,
+            effect = updatedEffect }
+            where
+                standardProj = filter isStandardEntity projectiles
+                isStandardEntity :: Entity -> Bool
+                isStandardEntity ent = (effect ent) == None
+                hitByFreeze ent = ((effect ent) == Freeze) && (detectCollision enemy ent)
+                (updatedVel, updatedEffect) = if any hitByFreeze projectiles
+                                        then ((0,0), Frozen)
+                                        else ((evelocity enemy), (effect enemy))
+
 
 -- moves player
 movePlayer :: Float -> (Bool, Bool, Bool, Bool, Bool) -> Entity -> Entity
@@ -287,20 +317,22 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
+-- Returns a projectile to allow for weapons and enemies to fire multiple at once
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
 fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius None]
 fireProjectile StandardProj cooldownTime ent = 
     if cooldownTime >= 10 -- TODO: change in terms of fps
-        then [Entity (position ent) (0, 150) 1 1 projectileRadius None]
-        else []
-fireProjectile SplittingProj cooldownTime ent = 
+        then [Entity (position ent) (0, 150) 1 1 projectileRadius None] else []
+fireProjectile ExplosiveProj cooldownTime ent = 
     if cooldownTime >= fps * 2
-        then [Entity (position ent) (0, 90) 1 1 projectileRadius Explosive]
-        else []
+        then [Entity (position ent) (0, 90) 1 1 projectileRadius Explosive] else []
+fireProjectile FreezeProj cooldownTime ent =
+    if cooldownTime >= fps
+        then [Entity (position ent) (0, 110) 1 1 projectileRadius Freeze] else []
 
 -- Will be useful when determining if projectiles should be removed
-outOfBounds :: Entity -> Bool
-outOfBounds ent = xOOB || yOOB
+inBounds :: Entity -> Bool
+inBounds ent = (not xOOB) && (not yOOB)
     where
         (xPos, yPos) = position ent
         r = getCircRadius ent
@@ -329,22 +361,6 @@ spawnEnemies entList = newEntList
 
 spawnEnemy :: Float -> Entity
 spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None
-
-detectCollisionList :: [Entity] -> Entity -> Bool
-detectCollisionList entList entRef = any (detectCollision entRef) entList
-
-detectCollisionCount :: [Entity] -> Entity -> Int
-detectCollisionCount entList entRef = length (filter (detectCollision entRef) entList)
-
-detectCollision :: Entity -> Entity -> Bool
-detectCollision ent1 ent2 = xCol && yCol
-    where
-        r1 = getCircRadius ent1
-        (xPos1, yPos1) = position ent1
-        r2 = getCircRadius ent2
-        (xPos2, yPos2) = position ent2
-        xCol = (xPos1 + r1) > (xPos2-r2) && (xPos1 - r1) < (xPos2 + r2)
-        yCol = (yPos1 + r1) > (yPos2-r2) && (yPos1 - r1) < (yPos2 + r2)
 
 -- Adds and removes necessary projectiles upon detonation (m key)
 detonateExplosives :: [Entity] -> [Entity]
