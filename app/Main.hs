@@ -226,15 +226,18 @@ runUpdates game =
             (x, y) = position $ player game
             (w, a, s, d, space) = keysDown game
             -- todo: do we need this player fire rate if using a cooldown?
-            (newPProjectiles, newLastShot) = if rem (frameCount game) playerFireRate == 0 && space
-                                then ((fireProjectile (activeWeapon game) cooldownTime (player game))++(playerProjectiles game), (frameCount game))
-                                else ((playerProjectiles game), (lastShot game))
+            newPProjectiles = if space
+                                then (fireProjectile (activeWeapon game) cooldownTime (player game))++(playerProjectiles game)
+                                else playerProjectiles game
             newEProjectiles = if rem (frameCount game) enemyFireRate == 0
                                 then (concatMap (fireProjectile EWeapon1 cooldownTime) (enemies game)) ++ (enemyProjectiles game)
                                 else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
                             else enemies game
+            newLastShot = if (length newPProjectiles) > (length $ playerProjectiles game)
+                            then frameCount game
+                            else lastShot game
 
 handleCollisions :: ShooterGame -> ShooterGame
 handleCollisions game = game {
@@ -280,9 +283,12 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
 
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
 fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius]
-fireProjectile StandardProj _ ent = [Entity (position ent) (0, 150) 1 1 projectileRadius]
+fireProjectile StandardProj cooldownTime ent = 
+    if cooldownTime >= 10 -- TODO: change to fps / x
+        then [Entity (position ent) (0, 150) 1 1 projectileRadius]
+        else []
 fireProjectile SplittingProj cooldownTime ent = 
-    if cooldownTime < 20 
+    if cooldownTime < fps
         then []
         else proj:(basicSplit proj)
         where
