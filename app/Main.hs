@@ -7,7 +7,11 @@ import Graphics.Gloss.Interface.Pure.Game
 
 -- CONTROLS --
 -- Move: w-a-s-d
--- Shoot: space bar
+-- Fire: space bar
+-- Weapons:
+--  h: Standard Projectiles
+--  j: TBD
+--  k: TBD
 -- New Game: n
 -- You have 5 health, to restart the game upon death press n.
 
@@ -204,7 +208,6 @@ moveEntities seconds game =
 
 runUpdates :: ShooterGame -> ShooterGame
 runUpdates game =
-    -- TODO: remove "dead" entities (health <= 0)
     if (not $ alive (player game))
         then gameOverState (score game)
     else
@@ -217,10 +220,11 @@ runUpdates game =
             (x, y) = position $ player game
             (w, a, s, d, space) = keysDown game
             newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
-                                then (fireProjectile (activeWeapon game) (player game)):(playerProjectiles game)
+                                then (fireProjectile (activeWeapon game) (player game))++(playerProjectiles game)
                                 else playerProjectiles game
             newEProjectiles = if rem (frameCount game) enemyFireRate == 0
-                                then (map (fireProjectile EWeapon1) (enemies game))++(enemyProjectiles game)
+                                then (concatMap (fireProjectile EWeapon1) (enemies game)) ++ (enemyProjectiles game)
+                                --then (map ((enemyProjectiles game) (++) fireProjectile EWeapon1) (enemies game))
                                 else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
@@ -268,9 +272,9 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
-fireProjectile :: Weapon -> Entity -> Entity
-fireProjectile EWeapon1 ent = Entity (position ent) (0,-150) 1 1 projectileRadius
-fireProjectile PWeapon1 ent = Entity (position ent) (0, 150) 1 1 projectileRadius
+fireProjectile :: Weapon -> Entity -> [Entity]
+fireProjectile EWeapon1 ent = [Entity (position ent) (0,-150) 1 1 projectileRadius]
+fireProjectile PWeapon1 ent = [Entity (position ent) (0, 150) 1 1 projectileRadius]
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
