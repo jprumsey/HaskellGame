@@ -10,7 +10,7 @@ import Graphics.Gloss.Interface.Pure.Game
 -- Fire: space bar
 -- Weapons:
 --  h: Standard Projectiles
---  j: Splitting Projectiles
+--  j: Exploding Projectiles, use f to detonate
 --  k: TBD
 -- New Game: n
 -- You have 5 health, to restart the game upon death press n.
@@ -24,7 +24,8 @@ data Entity = Entity { position :: (Float, Float),
                      evelocity :: (Float, Float),
                      health :: Int,
                      numSides :: Float,
-                     sideLength :: Float
+                     sideLength :: Float,
+                     explosive :: Bool -- deprecate if needed
                      } deriving Show
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
@@ -48,7 +49,7 @@ initialState :: ShooterGame
 initialState = Game
     {
         frameCount = 0,
-        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength,
+        player = Entity (0, -fromIntegral width/2 + fromIntegral offset) (100,100) 5 3 playerSideLength False,
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
@@ -64,7 +65,7 @@ gameOverState :: Int -> ShooterGame
 gameOverState finalScore = Game
     {
         frameCount = 0,
-        player = Entity (0, 0) (0,0) 0 3 playerSideLength,
+        player = Entity (0, 0) (0,0) 0 3 playerSideLength False,
         enemies = [],
         playerProjectiles = [],
         enemyProjectiles = [],
@@ -138,6 +139,7 @@ render game =
                 $ color white 
                 $ Text ( "Lives: " ++ show (health $ player game) ++ " Score: " ++ show (score game) )
 
+            -- TODO: display the current weapon, need to map text strings to actual weapon name
             -- the player
             playerShip = uncurry translate (position $ player game) $ color playerColor $ triangleSolid playerSideLength
             playerColor = dark red
@@ -146,7 +148,7 @@ render game =
             enemyShips = pictures ( map renderEnemy ( enemies game ) )
             renderEnemy :: Entity -> Picture
             renderEnemy ent = 
-                uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength
+                uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength  
 
             enemyColor = dark blue -- TODO: fix so it can use multiple enemies
 
@@ -156,9 +158,8 @@ render game =
             renderProjectile radius col ent =
                 uncurry translate (position ent) $ color col $ circleSolid radius
 
-            playerProjectileColor = white
+            playerProjectileColor = dark red
             enemyProjectileColor  = white
-    
 
 
 ------------------------------ CONTROLS -------------------------------
@@ -185,6 +186,7 @@ handleKeys (EventKey (SpecialKey KeySpace) state _ _) game = game { keysDown = u
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
 handleKeys (EventKey (Char 'h') _ _ _) game = game { activeWeapon = StandardProj }
 handleKeys (EventKey (Char 'j') _ _ _) game = game { activeWeapon = SplittingProj }
+handleKeys (EventKey (Char 'f') _ _ _) game = game { playerProjectiles = detonateExplosives (playerProjectiles game)}
 handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
 
@@ -226,12 +228,14 @@ runUpdates game =
             (x, y) = position $ player game
             (w, a, s, d, space) = keysDown game
             -- todo: do we need this player fire rate if using a cooldown?
-            newPProjectiles = if space
-                                then (fireProjectile (activeWeapon game) cooldownTime (player game))++(playerProjectiles game)
-                                else playerProjectiles game
-            newEProjectiles = if rem (frameCount game) enemyFireRate == 0
-                                then (concatMap (fireProjectile EWeapon1 cooldownTime) (enemies game)) ++ (enemyProjectiles game)
-                                else enemyProjectiles game
+            newPProjectiles = filter alive $ 
+                                if space
+                                    then (fireProjectile (activeWeapon game) cooldownTime (player game))++(playerProjectiles game)
+                                    else playerProjectiles game
+            newEProjectiles = filter alive $
+                                if rem (frameCount game) enemyFireRate == 0
+                                    then (concatMap (fireProjectile EWeapon1 cooldownTime) (enemies game)) ++ (enemyProjectiles game)
+                                    else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
                             else enemies game
@@ -282,17 +286,15 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         yPos' = yPos + yVel * seconds
 
 fireProjectile :: Weapon -> Int -> Entity -> [Entity]
-fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius]
+fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius False]
 fireProjectile StandardProj cooldownTime ent = 
-    if cooldownTime >= 10 -- TODO: change to fps / x
-        then [Entity (position ent) (0, 150) 1 1 projectileRadius]
+    if cooldownTime >= 10 -- TODO: change in terms of fps
+        then [Entity (position ent) (0, 150) 1 1 projectileRadius False]
         else []
 fireProjectile SplittingProj cooldownTime ent = 
-    if cooldownTime < fps
-        then []
-        else proj:(basicSplit proj)
-        where
-            proj = Entity (position ent) (0, 75) 1 1 projectileRadius
+    if cooldownTime >= fps * 2
+        then [Entity (position ent) (0, 90) 1 1 projectileRadius True]
+        else []
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
@@ -324,7 +326,7 @@ spawnEnemies entList = newEntList
         newEntList = entList ++ map spawnEnemy spawnPoints
 
 spawnEnemy :: Float -> Entity
-spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength
+spawnEnemy xCor = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength False
 
 detectCollisionList :: [Entity] -> Entity -> Bool
 detectCollisionList entList entRef = any (detectCollision entRef) entList
@@ -342,10 +344,32 @@ detectCollision ent1 ent2 = xCol && yCol
         xCol = (xPos1 + r1) > (xPos2-r2) && (xPos1 - r1) < (xPos2 + r2)
         yCol = (yPos1 + r1) > (yPos2-r2) && (yPos1 - r1) < (yPos2 + r2)
 
--- Returns two entities with velocity 45 degrees from y-axis
+-- Adds and removes necessary projectiles upon detonation (m key)
+detonateExplosives :: [Entity] -> [Entity]
+detonateExplosives projs = updatedProjectiles
+    where 
+        isExplosive :: Entity -> Bool
+        isExplosive ent = (explosive ent)
+
+        removedExplosive :: Entity -> Entity
+        removedExplosive ent = if (isExplosive ent)
+            then ent { health = 0 }
+            else ent
+
+        removedExplosives = map removedExplosive projs
+        newProjs = concatMap basicSplit (filter isExplosive removedExplosives)
+        updatedProjectiles = removedExplosives ++ newProjs
+
+
+-- Returns four entities each with velocity 45 degrees from axes (all four directions diagonally)
 basicSplit :: Entity -> [Entity]
 basicSplit ent = 
-    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius), (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius)]
+    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius False), 
+    (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius False),
+    (Entity (xPos, yPos) (diag, -diag) 1 1 projectileRadius False),
+    (Entity (xPos, yPos) (-diag, -diag) 1 1 projectileRadius False),
+    (Entity (xPos, yPos) (yVel, 0) 1 1 projectileRadius False),
+    (Entity (xPos, yPos) (-yVel, 0) 1 1 projectileRadius False)]
     where
         (xPos, yPos) = (position ent)
         (_, yVel) = (evelocity ent)
