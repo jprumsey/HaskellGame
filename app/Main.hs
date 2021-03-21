@@ -40,7 +40,8 @@ data ShooterGame = Game
         paused :: Bool,
         keysDown :: (Bool, Bool, Bool, Bool, Bool),
         activeWeapon :: Weapon,
-        score :: Int
+        score :: Int,
+        lastShot :: Int
     } deriving Show
 
 initialState :: ShooterGame
@@ -54,7 +55,8 @@ initialState = Game
         paused = False,
         keysDown = (False, False, False, False, False),
         activeWeapon = StandardProj,
-        score = 0
+        score = 0,
+        lastShot = (-30)
     }
 
 -- State upon loss
@@ -69,7 +71,8 @@ gameOverState finalScore = Game
         paused = False,
         keysDown = (False, False, False, False, False),
         activeWeapon = StandardProj,
-        score = finalScore
+        score = finalScore,
+        lastShot = 0
     }
 
 -- Window width, height, offset
@@ -215,16 +218,19 @@ runUpdates game =
         game { frameCount = (frameCount game) + 1,
             playerProjectiles = newPProjectiles,
             enemyProjectiles =  newEProjectiles,
-            enemies = newEnemies
+            enemies = newEnemies,
+            lastShot = newLastShot
             }
         where
+            cooldownTime = (frameCount game) - (lastShot game) -- Time elapsed since last firing of projectile, used with weapons who have a cooldown/reload time
             (x, y) = position $ player game
             (w, a, s, d, space) = keysDown game
-            newPProjectiles = if rem (frameCount game) playerFireRate == 0 && space
-                                then (fireProjectile (activeWeapon game) (player game))++(playerProjectiles game)
-                                else playerProjectiles game
+            -- todo: do we need this player fire rate if using a cooldown?
+            (newPProjectiles, newLastShot) = if rem (frameCount game) playerFireRate == 0 && space
+                                then ((fireProjectile (activeWeapon game) cooldownTime (player game))++(playerProjectiles game), (frameCount game))
+                                else ((playerProjectiles game), (lastShot game))
             newEProjectiles = if rem (frameCount game) enemyFireRate == 0
-                                then (concatMap (fireProjectile EWeapon1) (enemies game)) ++ (enemyProjectiles game)
+                                then (concatMap (fireProjectile EWeapon1 cooldownTime) (enemies game)) ++ (enemyProjectiles game)
                                 else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
@@ -272,12 +278,15 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
         xPos' = xPos + xVel * seconds
         yPos' = yPos + yVel * seconds
 
-fireProjectile :: Weapon -> Entity -> [Entity]
-fireProjectile EWeapon1 ent = [Entity (position ent) (0,-150) 1 1 projectileRadius]
-fireProjectile StandardProj ent = [Entity (position ent) (0, 150) 1 1 projectileRadius]
-fireProjectile SplittingProj ent = proj:(basicSplit proj)
-    where
-        proj = Entity (position ent) (0, 75) 1 1 projectileRadius
+fireProjectile :: Weapon -> Int -> Entity -> [Entity]
+fireProjectile EWeapon1 _ ent = [Entity (position ent) (0,-150) 1 1 projectileRadius]
+fireProjectile StandardProj _ ent = [Entity (position ent) (0, 150) 1 1 projectileRadius]
+fireProjectile SplittingProj cooldownTime ent = 
+    if cooldownTime < 20 
+        then []
+        else proj:(basicSplit proj)
+        where
+            proj = Entity (position ent) (0, 75) 1 1 projectileRadius
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
@@ -335,8 +344,6 @@ basicSplit ent =
         (xPos, yPos) = (position ent)
         (_, yVel) = (evelocity ent)
         diag = yVel * (1/(sqrt 2))
-
-
 
 
 main :: IO ()
