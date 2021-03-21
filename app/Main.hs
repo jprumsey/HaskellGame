@@ -10,7 +10,7 @@ import Graphics.Gloss.Interface.Pure.Game
 -- Fire: space bar
 -- Weapons:
 --  h: Standard Projectiles
---  j: TBD
+--  j: Splitting Projectiles
 --  k: TBD
 -- New Game: n
 -- You have 5 health, to restart the game upon death press n.
@@ -28,7 +28,7 @@ data Entity = Entity { position :: (Float, Float),
                      } deriving Show
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
-data Weapon = EWeapon1 | PWeapon1 deriving Show
+data Weapon = EWeapon1 | StandardProj | SplittingProj deriving Show
 
 data ShooterGame = Game
     { 
@@ -53,7 +53,7 @@ initialState = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = PWeapon1,
+        activeWeapon = StandardProj,
         score = 0
     }
 
@@ -68,7 +68,7 @@ gameOverState finalScore = Game
         enemyProjectiles = [],
         paused = False,
         keysDown = (False, False, False, False, False),
-        activeWeapon = PWeapon1,
+        activeWeapon = StandardProj,
         score = finalScore
     }
 
@@ -180,7 +180,8 @@ handleKeys (EventKey (SpecialKey KeySpace) state _ _) game = game { keysDown = u
     where
         (w, a, s, d, _) = keysDown game
         updatedKeys = if state == Down then (w, a, s, d, True) else (w, a, s, d, False)
-handleKeys (EventKey (Char 'h') _ _ _) game = game { activeWeapon = PWeapon1 }
+handleKeys (EventKey (Char 'h') _ _ _) game = game { activeWeapon = StandardProj }
+handleKeys (EventKey (Char 'j') _ _ _) game = game { activeWeapon = SplittingProj }
 handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
 
@@ -224,7 +225,6 @@ runUpdates game =
                                 else playerProjectiles game
             newEProjectiles = if rem (frameCount game) enemyFireRate == 0
                                 then (concatMap (fireProjectile EWeapon1) (enemies game)) ++ (enemyProjectiles game)
-                                --then (map ((enemyProjectiles game) (++) fireProjectile EWeapon1) (enemies game))
                                 else enemyProjectiles game
             newEnemies = if rem ( frameCount game ) enemySpawnRate == 120 
                             then spawnEnemies (enemies game) 
@@ -274,7 +274,10 @@ moveNonPlayer seconds ent = ent { position = (xPos', yPos') }
 
 fireProjectile :: Weapon -> Entity -> [Entity]
 fireProjectile EWeapon1 ent = [Entity (position ent) (0,-150) 1 1 projectileRadius]
-fireProjectile PWeapon1 ent = [Entity (position ent) (0, 150) 1 1 projectileRadius]
+fireProjectile StandardProj ent = [Entity (position ent) (0, 150) 1 1 projectileRadius]
+fireProjectile SplittingProj ent = proj:(basicSplit proj)
+    where
+        proj = Entity (position ent) (0, 75) 1 1 projectileRadius
 
 -- Will be useful when determining if projectiles should be removed
 outOfBounds :: Entity -> Bool
@@ -323,6 +326,17 @@ detectCollision ent1 ent2 = xCol && yCol
         (xPos2, yPos2) = position ent2
         xCol = (xPos1 + r1) > (xPos2-r2) && (xPos1 - r1) < (xPos2 + r2)
         yCol = (yPos1 + r1) > (yPos2-r2) && (yPos1 - r1) < (yPos2 + r2)
+
+-- Returns two entities with velocity 45 degrees from y-axis
+basicSplit :: Entity -> [Entity]
+basicSplit ent = 
+    [(Entity (xPos, yPos) (diag, diag) 1 1 projectileRadius), (Entity (xPos, yPos) (-diag, diag) 1 1 projectileRadius)]
+    where
+        (xPos, yPos) = (position ent)
+        (_, yVel) = (evelocity ent)
+        diag = yVel * (1/(sqrt 2))
+
+
 
 
 main :: IO ()
