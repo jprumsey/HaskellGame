@@ -13,6 +13,7 @@ import Graphics.Gloss.Interface.Pure.Game
 --  j: Exploding Projectiles, use f to detonate to spawn 6 sub-bullets
 --  k: Freeze Ray, immobilizes target
 -- New Game: n
+-- Pause: p
 -- You have 5 health, to restart the game upon death press n.
 
 ------------------------------ STATE -------------------------------
@@ -30,7 +31,6 @@ data Entity = Entity { position :: (Float, Float),
 
 -- Weapons are an ADT, see fireProjectiles for different qualitative functionality across weapon types
 data Weapon = EWeapon | StandardProj | ExplosiveProj | FreezeProj deriving Show
-
 
 data Effect = None | Explosive | Freeze | Frozen deriving (Show, Eq)
 
@@ -156,7 +156,7 @@ render game =
             renderEnemy ent = 
                 uncurry translate (position ent) $ color enemyColor $ rectangleSolid enemyBaseLength enemyBaseLength  
 
-            enemyColor = dark blue -- TODO: fix so it can use multiple enemies
+            enemyColor = dark blue
 
             playerProj = pictures ( map (renderProjectile) (playerProjectiles game))
             enemyProj  = pictures ( map (renderProjectile) (enemyProjectiles  game))
@@ -199,8 +199,6 @@ handleKeys (EventKey (Char 'k') _ _ _) game = game { activeWeapon = FreezeProj }
 handleKeys (EventKey (Char 'f') _ _ _) game = game { playerProjectiles = detonateExplosives (playerProjectiles game)}
 handleKeys (EventKey (Char 'n') _ _ _) game = initialState
 
-
--- TODO: implement this in update function
 -- For a 'p' keypress, pause or unpause the game
 handleKeys (EventKey (Char 'p') Down _ _) game =
  game { paused = (not (paused game)) }
@@ -209,7 +207,9 @@ handleKeys _ game = game
 
 ------------------------------ UPDATES -------------------------------
 update :: Float -> ShooterGame -> ShooterGame
-update seconds = handleCollisions . runUpdates . moveEntities seconds
+update seconds game = if (paused game)
+    then game
+    else (handleCollisions . runUpdates . moveEntities seconds) game
 
 -- moves everything
 moveEntities :: Float -> ShooterGame -> ShooterGame
@@ -335,10 +335,10 @@ fireProjectile :: Weapon -> Int -> Entity -> [Entity]
 fireProjectile EWeapon currTime ent = 
     if (effect ent) == Explosive
         then if currTime - (lastShot ent) >= enemyFireRate * 12
-            then [Entity (position ent) (-90, -90) 1 1 projectileRadius None 0, Entity (position ent) (0, -90) 1 1 projectileRadius None 0, Entity (position ent) (90, -90) 1 1 projectileRadius None 0]
+            then [Entity (position ent) (-70, -70) 1 1 projectileRadius None 0, Entity (position ent) (0, -90) 1 1 projectileRadius None 0, Entity (position ent) (70, -70) 1 1 projectileRadius None 0]
             else []
         else if currTime - (lastShot ent) >= enemyFireRate
-            then [Entity (position ent) (0, -150) 1 1 projectileRadius None 0]
+            then [Entity (position ent) (0, -110) 1 1 projectileRadius None 0]
             else []
 fireProjectile StandardProj currTime ent = 
     if currTime - (lastShot ent) >= playerFireRate
@@ -387,7 +387,7 @@ spawnEnemies entList = newEntList
 
 spawnEnemy :: Int -> Float -> Entity
 spawnEnemy pattern xCor 
-    | rem pattern 7 == 3 || rem pattern 7 == 5 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (fromIntegral (signum ( rem pattern 3 - 1)) * 100, -40) 1 4 enemyBaseLength None (-1000)
+    | rem pattern 7 == 3 || rem pattern 7 == 5 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (fromIntegral (signum ( rem pattern 3 - 1)) * 90, -40) 1 4 enemyBaseLength None (-1000)
     | rem pattern 7 == 4 = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -30) 1 4 enemyBaseLength Explosive (-1000)
     | otherwise = Entity (xCor, fromIntegral height / 2 - spawnOffset) (0, -50) 1 4 enemyBaseLength None (-1000)
 
